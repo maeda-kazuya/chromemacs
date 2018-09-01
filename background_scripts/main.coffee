@@ -494,7 +494,7 @@ do showUpgradeMessage = ->
       notificationId = "VimiumUpgradeNotification"
       notification =
         type: "basic"
-        iconUrl: chrome.runtime.getURL "icons/vimium.png"
+        iconUrl: chrome.runtime.getURL "icons/chromemacs.png"
         title: "Vimium Upgrade"
         message: "Vimium has been upgraded to version #{currentVersion}. Click here for more information."
         isClickable: true

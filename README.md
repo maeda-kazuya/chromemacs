@@ -1,7 +1,6 @@
 Chromemacs - The Hacker's Browser
 =============================
 
-[![Build Status](https://travis-ci.org/philc/Chromemacs.svg?branch=master)](https://travis-ci.org/philc/Chromemacs)
 
 Chromemacs is a Chrome extension that provides keyboard-based navigation and control of the web in the spirit of
 the Emacs editor. The source code is originally forked from Vimium, just replaced the keybind from Vim to Emacs.
@@ -59,7 +58,7 @@ Using find:
     n       cycle forward to the next find match
     N       cycle backward to the previous find match
 
-For advanced usage, see [regular expressions](https://github.com/philc/Chromemacs/wiki/Find-Mode) on the wiki.
+For advanced usage, see [regular expressions](https://github.com/philc/vimium/wiki/Find-Mode) on the wiki.
 
 Navigating your history:
 
@@ -145,8 +144,8 @@ Shifts are automatically detected so, for example, `<c-&>` corresponds to ctrl+s
 More documentation
 ------------------
 Many of the more advanced or involved features are documented on
-[Chromemacs's GitHub wiki](https://github.com/philc/Chromemacs/wiki). Also
-see the [FAQ](https://github.com/philc/Chromemacs/wiki/FAQ).
+[Chromemacs's GitHub wiki](https://github.com/philc/vimium/wiki). Also
+see the [FAQ](https://github.com/philc/vimium/wiki/FAQ).
 
 Contributing
 ------------
@@ -166,7 +165,7 @@ Release Notes
 1.64 (2018-08-30)
 
 
-- Custom search engines can now be `javascript:` URLs (eg., search the current [site](https://github.com/philc/Chromemacs/issues/2956#issuecomment-366509915)).
+- Custom search engines can now be `javascript:` URLs (eg., search the current [site](https://github.com/philc/vimium/issues/2956#issuecomment-366509915)).
 - You can now using local marks to mark a hash/anchor.  This is particularly useful for marking labels on GMail.
 - For filtered hints, you can now start typing the link text before the hints have been generated.
 - On Twitter, expanded tweets are now scrollable.
@@ -182,11 +181,11 @@ Release Notes
 - The `\I` control (case sensitivity) for find mode has been removed.  Find mode uses smartcase.
 - Various bug fixes.
 - 1.63.1 (Firefox only):
-    - Fix [#2958](https://github.com/philc/Chromemacs/issues/2958#issuecomment-366488659), link hints broken for `target="_blank"` links.
+    - Fix [#2958](https://github.com/philc/vimium/issues/2958#issuecomment-366488659), link hints broken for `target="_blank"` links.
 - 1.63.2 (Firefox only):
-    - Fix [#2962](https://github.com/philc/Chromemacs/issues/2962), find mode broken on Firefox Quantum.
+    - Fix [#2962](https://github.com/philc/vimium/issues/2962), find mode broken on Firefox Quantum.
 - 1.63.3:
-    - Fix [#2997](https://github.com/philc/Chromemacs/issues/2997), Chromemacs's DOM injection breaks Google Pay site.
+    - Fix [#2997](https://github.com/philc/vimium/issues/2997), Chromemacs's DOM injection breaks Google Pay site.
 
 
 License
