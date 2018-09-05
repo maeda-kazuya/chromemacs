@@ -1,4 +1,4 @@
-Chromemacs - The Hacker's Browser
+Chromemacs - Chrome navigation by Emacs keybind
 =============================
 
 

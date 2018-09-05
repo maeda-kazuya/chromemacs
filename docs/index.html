@@ -1,0 +1,276 @@
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+"http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+<title>Chromemacs - Chrome navigation by Emacs keybind</title>
+</head>
+<style type="text/css" media="screen">
+* { padding: 0; margin: 0;}
+body {
+  width:800px;
+  padding:0;
+  margin:0 auto;
+  font-family: "Helvetica Neue", "Lucida Grande", Helvetica, Arial, Verdana, sans-serif;
+  background:white url(background.png) top center no-repeat;
+  line-height:150%;
+  font-size:14px;
+  position:relative;
+}
+h2 {
+  margin: 0;
+  margin-bottom: 12px;
+  color: #696969;
+}
+a { color: #5173A7; }
+a:hover { color: black; }
+table#header {
+  padding-top: 30px;
+  height:60px;
+  vertical-align:bottom;
+}
+td#logo {
+}
+div#logoContainer {
+  width: 405px;
+  height: 61px;
+  position: relative;
+}
+td#logo img {
+  position: absolute;
+  /* Not using a negative margin because IE7 does not support it. */
+  left: -67px;
+}
+td#github {
+  width: 186px;
+}
+td#github a {
+  display: block;
+  width: 192px;
+  height: 30px;
+  padding-top:10px;
+  text-align: center;
+  background-color: #EFEFEF;
+  border:2px solid #dadada;
+  border-right: 0;
+  font-weight:bold;
+}
+td#github a:hover {
+  background-color:#5173A7;
+  color:white;
+  border-color:#405B84;
+}
+div#floating-panel {
+  position:absolute;
+  top:0;
+  right:2px;
+  width:191px;
+  height: 41px;
+  background-color: #EFEFEF;
+  border:2px solid #dadada;
+  border-left:0;
+  border-top: 0;
+/*    display:none;*/
+}
+p {
+  width:616px;
+  margin:10px 0 18px 0;
+}
+td#features {
+  width:225px;
+  padding-right:10px;
+  vertical-align:top;
+}
+td#features ul li {
+  margin:4px 0;
+}
+#video {
+  width: 560px;
+  height: 320px;
+  background-color: #dddddd;
+  border:2px solid #ccc;
+}
+div#install-button {
+  margin-top:25px;
+  text-align: center;
+}
+div#bottom-content {
+  margin-top:20px;
+/*    width:614px;*/
+  position:relative;
+}
+.column {
+/*    width: 48%;*/
+  width: 25%;
+  float:left;
+/*    margin-right:8px;*/
+}
+.keystrokes td {
+  font-size:12px;
+  padding: 0 1px;
+  vertical-align: top;
+}
+.keystrokes .keys {
+  text-align:right;
+  font-weight:bold;
+  color:#2f508e;
+  white-space:nowrap;
+}
+.keystrokes .title {
+  font-weight:bold;
+  padding-top:3px;
+  white-space:nowrap;
+}
+#footer {
+  clear: both;
+  text-align: center;
+  color: #333;
+  font-size: 12px;
+  margin:20px 0;
+}
+span.version {
+  position: absolute;
+  width:100px;
+  text-align:right;
+  left:-110px;
+  font-weight:bold;
+/*    border:1px solid red;*/
+}
+div.versionTitle {
+  margin-bottom:4px;
+}
+div.versionTitle .date {
+  color:#444;
+}
+</style>
+<body>
+
+<body id="index" onload="">
+<div id="floating-panel"></div>
+<table id="header">
+  <tr>
+      <!--
+    <td id="logo"><div id="logoContainer"><img src="chromemacs.png" /></div></td>
+    -->
+    <td id="github"><a href="https://github.com/maeda-kazuya/chromemacs">View source on GitHub</a></td>
+  </tr>
+</table>
+
+<br clear="both"/>
+<br clear="both"/>
+
+<h1 style="margin-bottom:8px">Chromemacs</h1>
+
+<p>
+  Chromemacs is a Google Chrome extension which provides keyboard shortcuts for navigation
+  and control in the spirit of the Emacs editor. The source code is originally forked from Vimium.
+</p>
+
+<script type="text/javascript">
+  var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+  document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+  </script>
+  <script type="text/javascript">
+  try {
+  var pageTracker = _gat._getTracker("UA-15849552-1");
+  pageTracker._trackPageview();
+  } catch(err) {}
+</script>
+
+<table>
+  <tr>
+    <td id="features">
+      <h2>Features</h2>
+      <ul>
+        <li>Helps you navigate the web without touching the mouse.</li>
+        <li>Uses a clever highlighting method to navigate using links.</li>
+        <li>Customizable keyboard shortcuts</li>
+        <li>Has an in-page help dialog to remind you of your personalized shortcuts.</li>
+      </ul>
+      <!--
+      <div id="install-button">
+        <a href="https://chrome.google.com/extensions/detail/dbepggeogbaibhgnhhndojpepiihcmeb"><img
+          src="install_button.png" style="border:0" /></a>
+      </div>
+      -->
+    </td>
+  </tr>
+</table>
+
+<div id="bottom-content">
+    <!--
+  <h2 style="margin-bottom:8px">Keyboard shortcuts</h2>
+
+  <div class="column">
+    <table class="keystrokes">
+      <tr><td></td><td></td><td class="title">Navigating history</td></tr>
+      <tr><td class="keys">H</td><td>:</td><td>Go back in history</td></tr>
+      <tr><td class="keys">L</td><td>:</td><td>Go forward in history</td></tr>
+      <tr><td></td><td></td><td class="title">Manipulating tabs</td></tr>
+      <tr><td class="keys">K, gt</td><td>:</td><td>Go one tab right</td></tr>
+      <tr><td class="keys">J, gT</td><td>:</td><td>Go one tab left</td></tr>
+      <tr><td class="keys">t</td><td>:</td><td>Create new tab</td></tr>
+      <tr><td class="keys">x</td><td>:</td><td>Close current tab</td></tr>
+      <tr><td class="keys">X</td><td>:</td><td>Restore closed tab</td></tr>
+    </table>
+  </div>
+
+  <div class="column">
+    <table class="keystrokes">
+      <tr><td></td><td></td><td class="title">Navigating the page</td></tr>
+      <tr><td class="keys">?</td><td>:</td><td>Show the help dialog</td></tr>
+      <tr><td class="keys">j</td><td>:</td><td>Scroll down</td></tr>
+      <tr><td class="keys">k</td><td>:</td><td>Scroll up</td></tr>
+      <tr><td class="keys">h</td><td>:</td><td>Scroll left</td></tr>
+      <tr><td class="keys">l</td><td>:</td><td>Scroll right</td></tr>
+      <tr><td class="keys">gg</td><td>:</td><td>Scroll to the top of the page</td></tr>
+      <tr><td class="keys">G</td><td>:</td><td>Scroll to the bottom of the page</td></tr>
+    </table>
+  </div>
+
+  <div class="column">
+    <table class="keystrokes">
+      <tr><td></td><td>&nbsp;</td><td></td></tr>
+      <tr><td class="keys">u, &lt;c-u&gt;</td><td>:</td><td>Scroll a half page up</td></tr>
+      <tr><td class="keys">d, &lt;c-d&gt;</td><td>:</td><td>Scroll a half page down</td></tr>
+      <tr><td class="keys">&lt;c-f&gt;</td><td>:</td><td>Scroll a full page down</td></tr>
+      <tr><td class="keys">&lt;c-b&gt;</td><td>:</td><td>Scroll a full page up</td></tr>
+      <tr><td class="keys">f</td><td>:</td><td>Open a link in the current tab</td></tr>
+      <tr><td class="keys">F</td><td>:</td><td>Open a link in a new tab</td></tr>
+      <tr><td class="keys">o</td><td>:</td><td>Open URL, bookmark, or history entry</td></tr>
+      <tr><td class="keys">O</td><td>:</td><td>Open URL, bookmark, or history entry in a new tab</td></tr>
+    </table>
+  </div>
+
+  <div class="column">
+    <table class="keystrokes">
+      <tr><td></td><td>&nbsp;</td><td></td></tr>
+      <tr><td class="keys">r</td><td>:</td><td>Reload the page</td></tr>
+      <tr><td class="keys">gs</td><td>:</td><td>View page source</td></tr>
+      <tr><td class="keys">/</td><td>:</td><td>Enter find mode</td></tr>
+      <tr><td class="keys">n</td><td>:</td><td>Cycle forward to the next find match</td></tr>
+      <tr><td class="keys">N</td><td>:</td><td>Cycle backward to the previous find match</td></tr>
+      <tr><td class="keys">yy</td><td>:</td><td>Copy the current URL to the clipboard</td></tr>
+      <tr><td class="keys">gf</td><td>:</td><td>Cycle focus to the next frame</td></tr>
+      <tr><td class="keys">i</td><td>:</td><td>Enter insert mode</td></tr>
+    </table>
+  </div>
+
+-->
+
+  <br clear="both"/>
+  <br clear="both"/>
+  <h2 style="margin-bottom:8px">Privacy policy</h2>
+
+  <br clear="both"/>
+  <br clear="both"/>
+  <h2 style="margin-bottom:8px">More</h2>
+
+  For the latest release notes, more advanced shortcuts, and how to create custom keybindings, see the
+  <strong><a href="https://github.com/maeda-kazuya/chromemacs/blob/master/README.md">README</a></strong>.
+
+<div id="footer">
+  &copy; Available under the <a href="http://github.com/maeda-kazuya/chromemacs/blob/master/MIT-LICENSE.txt">MIT license</a>.
+</div>
+</body>
+</html>
