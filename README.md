@@ -3,7 +3,7 @@ Chromemacs - Chrome navigation by Emacs keybind
 
 
 Chromemacs is a Chrome extension that provides keyboard-based navigation and control of the web in the spirit of
-the Emacs editor. The source code is originally forked from Vimium, just replaced the keybind from Vim to Emacs.
+the Emacs editor. The source code is originally forked from Vimium, just replaced the keybind from Vim to Emacs. Pull-Requests are welcome and appreciated.
 
 __Installation instructions:__
 
@@ -137,7 +137,7 @@ The following special keys are available for mapping:
 - `<left>`, `<right>`, `<up>`, `<down>` for the arrow keys.
 - `<f1>` through `<f12>` for the function keys.
 - `<space>` for the space key.
-- `<tab>`, `<enter>`, `<delete>`, `<backspace>`, `<insert>`, `<home>` and `<end>` for the corresponding non-printable keys (version 1.62 onwards).
+- `<tab>`, `<enter>`, `<delete>`, `<backspace>`, `<insert>`, `<home>` and `<end>` for the corresponding non-printable keys.
 
 Shifts are automatically detected so, for example, `<c-&>` corresponds to ctrl+shift+7 on an English keyboard.
 
@@ -161,31 +161,8 @@ PRs are welcome.
 
 Release Notes
 -------------
-
-1.64 (2018-08-30)
-
-
-- Custom search engines can now be `javascript:` URLs (eg., search the current [site](https://github.com/philc/vimium/issues/2956#issuecomment-366509915)).
-- You can now using local marks to mark a hash/anchor.  This is particularly useful for marking labels on GMail.
-- For filtered hints, you can now start typing the link text before the hints have been generated.
-- On Twitter, expanded tweets are now scrollable.
-- Fix bug whereby `<Enter>` wasn't recognised in the Vomnibar in some circumstances.
-- Various minor bug fixes.
-
-1.63 (2018-02-16)
-
-- The `reload` command now accepts a count prefix; so `999r` reloads all tabs (in the current window).
-- Better detection of click listeners for link hints.
-- Display version number in page popup.
-- The Vomnibar is now loaded on demand (not preloaded).  This should fix some issues with the dev console.
-- The `\I` control (case sensitivity) for find mode has been removed.  Find mode uses smartcase.
-- Various bug fixes.
-- 1.63.1 (Firefox only):
-    - Fix [#2958](https://github.com/philc/vimium/issues/2958#issuecomment-366488659), link hints broken for `target="_blank"` links.
-- 1.63.2 (Firefox only):
-    - Fix [#2962](https://github.com/philc/vimium/issues/2962), find mode broken on Firefox Quantum.
-- 1.63.3:
-    - Fix [#2997](https://github.com/philc/vimium/issues/2997), Chromemacs's DOM injection breaks Google Pay site.
+2.0.0 (2018-09-06)
+Forked from <a href="https://github.com/philc/vimium">Vimium</a>(version 1.64)
 
 
 License
