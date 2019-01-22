@@ -8,7 +8,7 @@ the Emacs editor. The source code is originally forked from Vimium, just replace
 __Installation instructions:__
 
 You can install the stable version of Chromemacs from the
-[Chrome Extensions Gallery](https://chrome.google.com/extensions/detail/dbepggeogbaibhgnhhndojpepiihcmeb).
+[Chrome Extensions Gallery](https://chrome.google.com/webstore/detail/chromemacs/kfdibhbheajeacnkkakomaliggbgndcf).
 
 Please see
 [CONTRIBUTING.md](CONTRIBUTING.md#installing-from-source)
