@@ -1,7 +1,8 @@
 {
   "manifest_version": 2,
   "name": "Chromemacs",
-  "version": "2.0.0",
+  "short_name": "Chromemacs",
+  "version": "2.0.3",
   "description": "Chromemacs provides keyboard shortcuts for navigation and control in the spirit of Emacs.",
   "icons": {  "16": "icons/icon16.png",
               "48": "icons/icon48.png",
@@ -30,11 +31,11 @@
     "tabs",
     "bookmarks",
     "history",
+    "notifications",
     "clipboardRead",
     "clipboardWrite",
     "storage",
     "sessions",
-    "notifications",
     "webNavigation",
     "<all_urls>"
   ],
