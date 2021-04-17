@@ -1,13 +1,10 @@
 sudo: false
 language: node_js
-node_js: "8"
+node_js: "10"
 before_install:
-  - npm install -g coffee-script
-  - npm install path@0.11
   - npm install util
-  - npm install -g phantomjs@1.9.20
-  - cake build
-script: cake test
+  - npm install puppeteer
+script: ./make.js test
 notifications:
   email: false
 branches:

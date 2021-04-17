@@ -2,8 +2,8 @@
 *.swo
 *.swp
 *.crx
-*.js
 *.sublime*
+options/*.js
 node_modules/*
 dist
 jscoverage.json
