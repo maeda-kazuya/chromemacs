@@ -6,13 +6,15 @@ the Vim editor.
 
 __Installation instructions:__
 
-Install via the
-[Chrome web store](https://chrome.google.com/webstore/detail/chromemacs/kfdibhbheajeacnkkakomaliggbgndcf) or
-the [Firefox Addons site](https://addons.mozilla.org/en-GB/firefox/addon/vimium-ff/).
+~~Install via the
+[Chrome web store](https://chrome.google.com/extensions/detail/dbepggeogbaibhgnhhndojpepiihcmeb) or
+the [Firefox Addons site](https://addons.mozilla.org/en-GB/firefox/addon/vimium-ff/).~~
+
+Clone this repository and load unpacked via chrome://extensions
 
 To install from source, see [here](CONTRIBUTING.md#installing-from-source).
 
-Vimium's Options page can be reached via a link on the help dialog (type `?`) or via the button next to Vimium
+Chromemacs's Options page can be reached via a link on the help dialog (type `<c-h>`) or via the button next to Vimium
 on the extension pages of Chrome (`chrome://extensions`) or Firefox (`about:addons`).
 
 Keyboard Bindings
