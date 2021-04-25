@@ -28,10 +28,13 @@
   },
   "permissions": [
     "tabs",
+    "bookmarks",
+    "history",
     "clipboardRead",
     "clipboardWrite",
     "storage",
     "sessions",
+    "notifications",
     "webNavigation",
     "<all_urls>"
   ],

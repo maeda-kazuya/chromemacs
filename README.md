@@ -138,32 +138,22 @@ The following special keys are available for mapping:
 - `<left>`, `<right>`, `<up>`, `<down>` for the arrow keys.
 - `<f1>` through `<f12>` for the function keys.
 - `<space>` for the space key.
-- `<tab>`, `<enter>`, `<delete>`, `<backspace>`, `<insert>`, `<home>` and `<end>` for the corresponding non-printable keys.
+- `<tab>`, `<enter>`, `<delete>`, `<backspace>`, `<insert>`, `<home>` and `<end>` for the corresponding non-printable keys (version 1.62 onwards).
 
 Shifts are automatically detected so, for example, `<c-&>` corresponds to ctrl+shift+7 on an English keyboard.
 
 More documentation
 ------------------
 Many of the more advanced or involved features are documented on
-[Chromemacs's GitHub wiki](https://github.com/philc/vimium/wiki). Also
+[Vimium's GitHub wiki](https://github.com/philc/vimium/wiki). Also
 see the [FAQ](https://github.com/philc/vimium/wiki/FAQ).
 
 Contributing
 ------------
-Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
-
-Firefox Support
----------------
-
-There is an *experimental* port of Chromemacs on Firefox [here](https://addons.mozilla.org/en-GB/firefox/addon/Chromemacs-ff/).
-This is very much experimental: most features work, although some bugs and issues remain.
-
-PRs are welcome.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 Release Notes
 -------------
-2.0.0 (2018-09-06)
-Forked from <a href="https://github.com/philc/vimium">Vimium</a>(version 1.64)
 
 See [CHANGELOG](CHANGELOG.md) for the major changes in each release.
 
