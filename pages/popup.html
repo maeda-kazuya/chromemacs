@@ -1,6 +1,7 @@
 <html>
   <head>
     <link rel="stylesheet" type="text/css" href="options.css">
+    <link rel="stylesheet" type="text/css" href="../content_scripts/vimium.css">
     <style>
       * {
         margin: 0px;
@@ -52,11 +53,11 @@
     <script src="../lib/settings.js"></script>
     <script src="options.js"></script>
   </head>
-  <body>
+  <body class="vimiumBody">
     <div id="state"></div>
 
     <div id="exclusionScrollBox">
-      <!-- Populated from exclusions.html by options.coffee. -->
+      <!-- Populated from exclusions.html by options.js. -->
     </div>
 
     <!-- Some extra space which is hidden underneath the footer. -->

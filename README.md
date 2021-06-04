@@ -1,27 +1,28 @@
 Chromemacs - Chrome navigation by Emacs keybind
 =============================
 
-
-Chromemacs is a Chrome extension that provides keyboard-based navigation and control of the web in the spirit of
-the Emacs editor. The source code is originally forked from Vimium, just replaced the keybind from Vim to Emacs. Pull-Requests are welcome and appreciated.
+Vimium is a browser extension that provides keyboard-based navigation and control of the web in the spirit of
+the Vim editor.
 
 __Installation instructions:__
 
-You can install the stable version of Chromemacs from the
-[Chrome Extensions Gallery](https://chrome.google.com/webstore/detail/chromemacs/kfdibhbheajeacnkkakomaliggbgndcf).
+~~Install via the
+[Chrome web store](https://chrome.google.com/extensions/detail/dbepggeogbaibhgnhhndojpepiihcmeb) or
+the [Firefox Addons site](https://addons.mozilla.org/en-GB/firefox/addon/vimium-ff/).~~
 
-Please see
-[CONTRIBUTING.md](CONTRIBUTING.md#installing-from-source)
-for instructions on how you can install Chromemacs from source.
+Clone this repository and load unpacked via chrome://extensions
 
-The Options page can be reached via a link on the help dialog (type `?`) or via the button next to Chromemacs on
-the Chrome Extensions page (`chrome://extensions`).
+To install from source, see [here](CONTRIBUTING.md#installing-from-source).
+
+Chromemacs's Options page can be reached via a link on the help dialog (type `<c-h>`) or via the button next to Vimium
+on the extension pages of Chrome (`chrome://extensions`) or Firefox (`about:addons`).
 
 Keyboard Bindings
 -----------------
 
 Modifier keys are specified as `<c-x>`, `<m-x>`, and `<a-x>` for ctrl+x, meta+x, and alt+x
-respectively. For shift+x and ctrl-shift-x, just type `X` and `<c-X>`. See the next section for how to customize these bindings.
+respectively. For shift+x and ctrl-shift-x, just type `X` and `<c-X>`. See the next section for how to
+customize these bindings.
 
 Once you have Chromemacs installed, you can see this list of key bindings at any time by typing `?`.
 
@@ -88,7 +89,7 @@ Using marks:
 
 Additional advanced browsing commands:
 
-    <c-g><left>, <c-g><right>  
+    <c-g><left>, <c-g><right>
               Follow the link labeled 'next' or '>' ('previous' or '<')
               - helpful for browsing paginated sites
     <a-f>   open multiple links in a new tab
@@ -137,34 +138,25 @@ The following special keys are available for mapping:
 - `<left>`, `<right>`, `<up>`, `<down>` for the arrow keys.
 - `<f1>` through `<f12>` for the function keys.
 - `<space>` for the space key.
-- `<tab>`, `<enter>`, `<delete>`, `<backspace>`, `<insert>`, `<home>` and `<end>` for the corresponding non-printable keys.
+- `<tab>`, `<enter>`, `<delete>`, `<backspace>`, `<insert>`, `<home>` and `<end>` for the corresponding non-printable keys (version 1.62 onwards).
 
 Shifts are automatically detected so, for example, `<c-&>` corresponds to ctrl+shift+7 on an English keyboard.
 
 More documentation
 ------------------
 Many of the more advanced or involved features are documented on
-[Chromemacs's GitHub wiki](https://github.com/philc/vimium/wiki). Also
+[Vimium's GitHub wiki](https://github.com/philc/vimium/wiki). Also
 see the [FAQ](https://github.com/philc/vimium/wiki/FAQ).
 
 Contributing
 ------------
-Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
-
-Firefox Support
----------------
-
-There is an *experimental* port of Chromemacs on Firefox [here](https://addons.mozilla.org/en-GB/firefox/addon/Chromemacs-ff/).
-This is very much experimental: most features work, although some bugs and issues remain.
-
-PRs are welcome.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 Release Notes
 -------------
-2.0.0 (2018-09-06)
-Forked from <a href="https://github.com/philc/vimium">Vimium</a>(version 1.64)
 
+See [CHANGELOG](CHANGELOG.md) for the major changes in each release.
 
 License
 -------
-Copyright (c) Phil Crosby, Ilya Sukhar. See MIT-LICENSE.txt for details.
+Copyright (c) Phil Crosby, Ilya Sukhar. See [MIT-LICENSE.txt](MIT-LICENSE.txt) for details.

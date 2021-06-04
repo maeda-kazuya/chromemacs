@@ -261,6 +261,7 @@ div#vimiumHelpDialog a.closeButton {
   position: relative;
   top: 3px;
   padding-left: 5px;
+  cursor: pointer;
 }
 div#vimiumHelpDialog a {
   text-decoration: underline;
@@ -297,6 +298,7 @@ a:link.vimiumHelDialogLink, a:visited.vimiumHelDialogLink,
   a:hover.vimiumHelDialogLink, a:active.vimiumHelDialogLink, a#toggleAdvancedCommands {
     color:#2f508e;
     text-decoration: underline;
+    cursor: pointer;
 }
 
 /* Vimium HUD CSS */
@@ -304,49 +306,75 @@ a:link.vimiumHelDialogLink, a:visited.vimiumHelDialogLink,
 div.vimiumHUD {
   display: block;
   position: fixed;
-  bottom: 0px;
-  /* Keep this far enough to the right so that it doesn't collide with the "popups blocked" chrome HUD. */
-  right: 0px;
-  color: black;
-  height: auto;
-  min-height: 13px;
-  width: auto;
-  max-width: 400px;
-  min-width: 150px;
+  width: calc(100% - 20px);
+  bottom: 8px;
+  left: 8px;
+  background: #F1F1F1;
   text-align: left;
-  background-color: #ebebeb;
-  padding: 3px 3px 2px 3px;
-  margin: 0;
-  border: 1px solid #b3b3b3;
-  border-radius: 4px 4px 0 0;
-  font-family: "Lucida Grande", "Arial", "Sans";
-  font-size: 12px;
-  text-shadow: 0px 1px 2px #FFF;
-  line-height: 1.0;
+  border-radius: 4px;
+  box-shadow: 0px 2px 10px rgba(0, 0, 0, 0.8);
+  border: 1px solid #aaa;
+  z-index: 2139999999;
 }
 
 iframe.vimiumHUDFrame {
-  display: block;
-  background: none;
-  position: fixed;
-  bottom: 0px;
-  right: 150px;
-  height: 20px;
-  min-height: 20px;
-  width: 450px;
-  min-width: 150px;
+  background-color: transparent;
   padding: 0px;
-  margin: 0;
+  overflow: hidden;
+  display: block;
+  position: fixed;
+  width: 20%;
+  min-width: 300px;
+  height: 58px;
+  bottom: -14px;
+  right: 20px;
+  margin: 0 0 0 -40%;
   border: none;
-  z-index: 2149999998; /* Two less than the reference value. */
+  z-index: 2139999998; /* Two less than the reference value. */
   opacity: 0;
 }
 
+div.vimiumHUD .vimiumHUDSearchArea {
+  display: block;
+  padding: 3px;
+  background-color: #F1F1F1;
+  border-radius: 4px 4px 0 0;
+}
+
+div.vimiumHUD .vimiumHUDSearchAreaInner {
+  color: #777;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  height: 30px;
+  margin-bottom: 0;
+  padding: 2px 4px;
+  border-radius: 3px;
+  width: 100%;
+  outline: none;
+  box-sizing: border-box;
+  line-height: 20px;
+}
+
+div.vimiumHUD .hud-find {
+  background: #fff;
+  border: 1px solid #ccc;
+}
+
 div.vimiumHUD span#hud-find-input, div.vimiumHUD span#hud-match-count {
+  color: #000;
   display: inline;
   outline: none;
   white-space: nowrap;
   overflow-y: hidden;
+}
+
+div.vimiumHUD span#hud-find-input:before {
+  content: "/";
+}
+
+div.vimiumHUD span#hud-match-count {
+  color: #aaa;
+  font-size: 12px;
 }
 
 div.vimiumHUD span#hud-find-input br {
@@ -371,7 +399,7 @@ iframe.vomnibarFrame {
 
   display: block;
   position: fixed;
-  width: calc(80% + 20px); /* same adjustment as in pages/vomnibar.coffee */
+  width: calc(80% + 20px); /* same adjustment as in pages/vomnibar.js */
   min-width: 400px;
   height: calc(100% - 70px);
   top: 70px;
@@ -379,7 +407,7 @@ iframe.vomnibarFrame {
   margin: 0 0 0 -40%;
   border: none;
   font-family: sans-serif;
-  z-index: 2149999998; /* Two less than the reference value. */
+  z-index: 2139999998; /* Two less than the reference value. */
 }
 
 div.vimiumFlash {
@@ -401,4 +429,87 @@ iframe.vimiumUIComponentVisible {
 
 iframe.vimiumUIComponentReactivated {
   border: 5px solid yellow;
+}
+
+iframe.vimiumNonClickable {
+  pointer-events: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  /* DarkReader is a popular dark mode browser extension. It can apply an invert filter to the whole page to
+   * make the page dark, when used in Filter and Filter+ modes. We want to reverse/invert that filter again
+   * for Vimium's UI elements, because Vimium is already dark mode aware. */
+  iframe.reverseDarkReaderFilter {
+    -webkit-filter: invert(100%) hue-rotate(180deg) !important;
+    filter: invert(100%) hue-rotate(180deg) !important;
+  }
+
+  /* Dark mode CSS for options page and exclusions */
+
+  body.vimiumBody {
+    background-color: #292a2d;
+    color: white;
+  }
+
+  body.vimiumBody a,
+  body.vimiumBody a:visited {
+    color: #8ab4f8;
+  }
+
+  body.vimiumBody textarea,
+  body.vimiumBody input {
+    background-color: #1d1d1f;
+    border-color: #1d1d1f;
+    color: #e8eaed;
+  }
+
+  body.vimiumBody div.example {
+    color: #9aa0a6;
+  }
+
+  body.vimiumBody div#state,
+  body.vimiumBody div#footer {
+    background-color: #202124;
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  /* Dark Mode CSS for Help Dialog */
+
+  div#vimiumHelpDialogContainer {
+    border-color: rgba(255, 255, 255, 0.1);
+    background-color: #202124;
+  }
+
+  div#vimiumHelpDialog {
+    background-color: #292a2d;
+    color: white;
+  }
+
+  div#vimiumHelpDialog td.vimiumHelpDescription {
+    color: #c9cccf;
+  }
+
+  span#vimiumTitle,
+  div#vimiumHelpDialog td.vimiumHelpSectionTitle {
+    color: white;
+  }
+
+  #vimiumTitle > span:first-child {
+    color: #8ab4f8 !important;
+  }
+
+  div#vimiumHelpDialog a {
+    color: #8ab4f8;
+  }
+
+  div#vimiumHelpDialog div.vimiumDivider {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+
+  span.vimiumHelpDialogKey {
+    background-color: #1d1d1f;
+    border: solid 1px black;
+    box-shadow: none;
+    color: white;
+  }
 }
