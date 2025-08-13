@@ -4,81 +4,84 @@
 const Vomnibar = {
   vomnibarUI: null,
 
-  // Extract any additional options from the command's registry entry.
-  extractOptionsFromRegistryEntry(registryEntry, callback) {
-    return callback ? callback(Object.assign({}, registryEntry.options)) : null;
-  },
-
-  // sourceFrameId here (and below) is the ID of the frame from which this request originates, which may be
-  // different from the current frame.
+  // sourceFrameId here (and below) is the ID of the frame from which this request originates, which
+  // may be different from the current frame.
 
   activate(sourceFrameId, registryEntry) {
-    return this.extractOptionsFromRegistryEntry(registryEntry, options => {
-      return this.open(sourceFrameId, Object.assign(options, {completer:"omni"}));
-    });
+    const options = Object.assign({}, registryEntry.options, { completer: "omni" });
+    this.open(sourceFrameId, options);
   },
 
   activateInNewTab(sourceFrameId, registryEntry) {
-    return this.extractOptionsFromRegistryEntry(registryEntry, options => {
-      return this.open(sourceFrameId, Object.assign(options, {completer:"omni", newTab: true}));
-    });
+    const options = Object.assign({}, registryEntry.options, { completer: "omni", newTab: true });
+    this.open(sourceFrameId, options);
   },
 
   activateTabSelection(sourceFrameId) {
-    return this.open(sourceFrameId, {
+    this.open(sourceFrameId, {
       completer: "tabs",
-      selectFirst: true
+      selectFirst: true,
     });
   },
 
-  activateBookmarks(sourceFrameId) {
-    return this.open(sourceFrameId, {
-      completer: "bookmarks",
-      selectFirst: true
-    });
-  },
-
-  activateBookmarksInNewTab(sourceFrameId) {
-    return this.open(sourceFrameId, {
+  activateBookmarks(sourceFrameId, registryEntry) {
+    const options = Object.assign({}, registryEntry.options, {
       completer: "bookmarks",
       selectFirst: true,
-      newTab: true
     });
+    this.open(sourceFrameId, options);
+  },
+
+  activateBookmarksInNewTab(sourceFrameId, registryEntry) {
+    const options = Object.assign({}, registryEntry.options, {
+      completer: "bookmarks",
+      selectFirst: true,
+      newTab: true,
+    });
+    this.open(sourceFrameId, options);
   },
 
   activateEditUrl(sourceFrameId) {
-    return this.open(sourceFrameId, {
+    this.open(sourceFrameId, {
       completer: "omni",
       selectFirst: false,
-      query: window.location.href
+      query: globalThis.location.href,
     });
   },
 
   activateEditUrlInNewTab(sourceFrameId) {
-    return this.open(sourceFrameId, {
+    this.open(sourceFrameId, {
       completer: "omni",
       selectFirst: false,
-      query: window.location.href,
-      newTab: true
+      query: globalThis.location.href,
+      newTab: true,
     });
   },
 
   init() {
-    if (!this.vomnibarUI)
-      this.vomnibarUI = new UIComponent("pages/vomnibar.html", "vomnibarFrame", function() {})
+    if (!this.vomnibarUI) {
+      this.vomnibarUI = new UIComponent();
+      this.vomnibarUI.load("pages/vomnibar_page.html", "vomnibar-frame");
+    }
   },
 
-  // This function opens the vomnibar. It accepts options, a map with the values:
-  //   completer   - The completer to fetch results from.
-  //   query       - Optional. Text to prefill the Vomnibar with.
-  //   selectFirst - Optional, boolean. Whether to select the first entry.
-  //   newTab      - Optional, boolean. Whether to open the result in a new tab.
-  open(sourceFrameId, options) {
+  // Opens the vomnibar.
+  // - vomnibarShowOptions:
+  //     completer: The name of the completer to fetch results from.
+  //     query: Optional. Text to prefill the Vomnibar with.
+  //     selectFirst: Optional. Whether to select the first entry.
+  //     newTab: Optional. Whether to open the result in a new tab.
+  //     keyword: A keyword which will scope the search to a UserSearchEngine.
+  open(sourceFrameId, vomnibarShowOptions) {
     this.init();
     // The Vomnibar cannot coexist with the help dialog (it causes focus issues).
     HelpDialog.abort();
-    return this.vomnibarUI.activate(Object.assign(options, { name: "activate", sourceFrameId, focus: true }));
-  }
+    Utils.assertType(VomnibarShowOptions, vomnibarShowOptions);
+    this.vomnibarUI.show(
+      Object.assign(vomnibarShowOptions, { name: "activate" }),
+      { sourceFrameId, focus: true },
+    );
+  },
 };
 
-global.Vomnibar = Vomnibar;
+globalThis.Vomnibar = Vomnibar;
