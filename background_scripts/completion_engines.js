@@ -1,24 +1,26 @@
-// A completion engine provides search suggestions for a custom search engine.  A custom search engine is
-// identified by a "searchUrl".  An "engineUrl" is used for fetching suggestions, whereas a "searchUrl" is used
-// for the actual search itself.
+// A completion engine provides search suggestions for a custom search engine. A custom search
+// engine is identified by a "searchUrl". An "engineUrl" is used for fetching suggestions, whereas a
+// "searchUrl" is used for the actual search itself.
 //
 // Each completion engine defines:
 //
-//   1. An "engineUrl". This is the URL to use for search completions and is passed as the option "engineUrl"
-//      to the "BaseEngine" constructor.
+//   1. An "engineUrl". This is the URL to use for search completions and is passed as the option
+//      "engineUrl" to the "BaseEngine" constructor.
 //
-//   2. One or more regular expressions which define the custom search engine URLs for which the completion
-//      engine will be used. This is passed as the "regexps" option to the "BaseEngine" constructor.
+//   2. One or more regular expressions which define the custom search engine URLs for which the
+//      completion engine will be used. This is passed as the "regexps" option to the "BaseEngine"
+//      constructor.
 //
-//   3. A "parse" function. This takes a successful XMLHttpRequest object (the request has completed
-//      successfully), and returns a list of suggestions (a list of strings).  This method is always executed
-//      within the context of a try/catch block, so errors do not propagate.
+//   3. A "parse" function. This takes the text body of an HTTP response and returns a list of
+//      suggestions (a list of strings). This method is always executed within the context of a
+//      try/catch block, so errors do not propagate.
 //
-//   4. Each completion engine *must* include an example custom search engine.  The example must include an
-//      example "keyword" and an example "searchUrl", and may include an example "description" and an
-//      "explanation".
+//   4. Each completion engine *must* include an example custom search engine. The example must
+//      include an example "keyword" and an example "searchUrl", and may include an example
+//      "description" and an "explanation". This info is shown as documentation to the user.
 //
-// Each new completion engine must be added to the list "CompletionEngines" at the bottom of this file.
+// Each new completion engine must be added to the list "CompletionEngines" at the bottom of this
+// file.
 //
 // The lookup logic which uses these completion engines is in "./completion_search.js".
 //
@@ -27,158 +29,152 @@
 //   options.engineUrl: the URL to use for the completion engine. This must be a string.
 //   options.regexps: one or regular expressions.  This may either a single string or a list of strings.
 //   options.example: an example object containing at least "keyword" and "searchUrl", and optional "description".
+// TODO(philc): This base class is doing very little. We should remove it and use composition.
 class BaseEngine {
   constructor(options) {
     Object.assign(this, options);
-    this.regexps = this.regexps.map(regexp => new RegExp(regexp));
+    this.regexps = this.regexps.map((regexp) => new RegExp(regexp));
   }
 
-  match(searchUrl) { return Utils.matchesAnyRegexp(this.regexps, searchUrl); }
-  getUrl(queryTerms) { return Utils.createSearchUrl(queryTerms, this.engineUrl); }
-}
-
-// Several Google completion engines package responses as XML. This parses such XML.
-class GoogleXMLBaseEngine extends BaseEngine {
-  parse(xhr) {
-    return Array.from(xhr.responseXML.getElementsByTagName("suggestion"))
-    .map(suggestion => suggestion.getAttribute("data"))
-    .filter(suggestion => suggestion);
+  match(searchUrl) {
+    return Utils.matchesAnyRegexp(this.regexps, searchUrl);
+  }
+  getUrl(queryTerms) {
+    return UrlUtils.createSearchUrl(queryTerms.join(" "), this.engineUrl);
   }
 }
 
-class Google extends GoogleXMLBaseEngine {
+export class Google extends BaseEngine {
   constructor() {
     super({
-      engineUrl: "https://suggestqueries.google.com/complete/search?ss_protocol=legace&client=toolbar&q=%s",
+      engineUrl: "http://suggestqueries.google.com/complete/search?client=chrome&q=%s",
       regexps: ["^https?://[a-z]+\\.google\\.(com|ie|co\\.(uk|jp)|ca|com\\.au)/"],
       example: {
         searchUrl: "https://www.google.com/search?q=%s",
-        keyword: "g"
-      }
+        keyword: "g",
+      },
     });
+  }
+
+  parse(text) {
+    return JSON.parse(text)[1];
   }
 }
 
+const googleMapsPrefix = "map of ";
 
-class GoogleMaps extends GoogleXMLBaseEngine {
+export class GoogleMaps extends BaseEngine {
   constructor() {
-    const q = GoogleMaps.prefix.split(" ").join("+");
     super({
-      engineUrl: `https://suggestqueries.google.com/complete/search?ss_protocol=legace&client=toolbar&q=${q}%s`,
+      engineUrl:
+        `http://suggestqueries.google.com/complete/search?client=chrome&ds=yt&q=${googleMapsPrefix}%s`,
       regexps: ["^https?://[a-z]+\\.google\\.(com|ie|co\\.(uk|jp)|ca|com\\.au)/maps"],
       example: {
         searchUrl: "https://www.google.com/maps?q=%s",
         keyword: "m",
-        explanation:
-          `\
-This uses regular Google completion, but prepends the text "<tt>map of</tt>" to the query.  It works
+        explanation: `\
+This uses regular Google completion, but prepends the text "<tt>map of </tt>" to the query.  It works
 well for places, countries, states, geographical regions and the like, but will not perform address
 search.\
-`
-      }
+`,
+      },
     });
   }
 
-  parse(xhr) {
-    return Array.from(super.parse(xhr))
-    .filter(suggestion => suggestion.startsWith(GoogleMaps.prefix))
-    .map(suggestion => suggestion.slice(GoogleMaps.prefix.length));
+  parse(text) {
+    return JSON.parse(text)[1]
+      .filter((suggestion) => suggestion.startsWith(googleMapsPrefix))
+      .map((suggestion) => suggestion.slice(googleMapsPrefix));
   }
 }
 
-GoogleMaps.prefix = "map of";
-
-class Youtube extends GoogleXMLBaseEngine {
+export class Youtube extends BaseEngine {
   constructor() {
     super({
-      engineUrl: "https://suggestqueries.google.com/complete/search?client=youtube&ds=yt&xml=t&q=%s",
+      engineUrl: "http://suggestqueries.google.com/complete/search?client=chrome&ds=yt&q=%s",
       regexps: ["^https?://[a-z]+\\.youtube\\.com/results"],
       example: {
         searchUrl: "https://www.youtube.com/results?search_query=%s",
-        keyword: "y"
-      }
+        keyword: "y",
+      },
     });
+  }
+
+  parse(text) {
+    return JSON.parse(text)[1];
   }
 }
 
-class Wikipedia extends BaseEngine {
+export class Wikipedia extends BaseEngine {
   constructor() {
     super({
       engineUrl: "https://en.wikipedia.org/w/api.php?action=opensearch&format=json&search=%s",
       regexps: ["^https?://[a-z]+\\.wikipedia\\.org/"],
       example: {
         searchUrl: "https://www.wikipedia.org/w/index.php?title=Special:Search&search=%s",
-        keyword: "w"
-      }
+        keyword: "w",
+      },
     });
   }
 
-  parse(xhr) { return JSON.parse(xhr.responseText)[1]; }
+  parse(text) {
+    return JSON.parse(text)[1];
+  }
 }
 
-class Bing extends BaseEngine {
+export class Bing extends BaseEngine {
   constructor() {
     super({
       engineUrl: "https://api.bing.com/osjson.aspx?query=%s",
       regexps: ["^https?://www\\.bing\\.com/search"],
       example: {
         searchUrl: "https://www.bing.com/search?q=%s",
-        keyword: "b"
-      }
+        keyword: "b",
+      },
     });
   }
 
-  parse(xhr) { return JSON.parse(xhr.responseText)[1]; }
+  parse(text) {
+    return JSON.parse(text)[1];
+  }
 }
 
-class Amazon extends BaseEngine {
+export class Amazon extends BaseEngine {
   constructor() {
     super({
-      engineUrl: "https://completion.amazon.com/search/complete?method=completion&search-alias=aps&client=amazon-search-ui&mkt=1&q=%s",
-      regexps: ["^https?://www\\.amazon\\.(com|co\\.uk|ca|de|com\\.au)/s/"],
+      engineUrl:
+        "https://completion.amazon.com/api/2017/suggestions?mid=ATVPDKIKX0DER&alias=aps&prefix=%s",
+      regexps: ["^https?://(www|smile)\\.amazon\\.(com|co\\.uk|ca|de|com\\.au)/s/"],
       example: {
         searchUrl: "https://www.amazon.com/s/?field-keywords=%s",
-        keyword: "a"
-      }
+        keyword: "a",
+      },
     });
   }
 
-  parse(xhr) { return JSON.parse(xhr.responseText)[1]; }
-}
-
-class AmazonJapan extends BaseEngine {
-  constructor() {
-    super({
-      engineUrl: "https://completion.amazon.co.jp/search/complete?method=completion&search-alias=aps&client=amazon-search-ui&mkt=6&q=%s",
-      regexps: ["^https?://www\\.amazon\\.co\\.jp/(s/|gp/search)"],
-      example: {
-        searchUrl: "https://www.amazon.co.jp/s/?field-keywords=%s",
-        keyword: "aj"
-      }
-    });
+  parse(text) {
+    return JSON.parse(text).suggestions.map((suggestion) => suggestion.value);
   }
-
-  parse(xhr) { return JSON.parse(xhr.responseText)[1]; }
 }
 
-class DuckDuckGo extends BaseEngine {
+export class DuckDuckGo extends BaseEngine {
   constructor() {
     super({
       engineUrl: "https://duckduckgo.com/ac/?q=%s",
       regexps: ["^https?://([a-z]+\\.)?duckduckgo\\.com/"],
       example: {
         searchUrl: "https://duckduckgo.com/?q=%s",
-        keyword: "d"
-      }
+        keyword: "d",
+      },
     });
   }
 
-  parse(xhr) {
-    return Array.from(JSON.parse(xhr.responseText)).map((suggestion) => suggestion.phrase);
+  parse(text) {
+    return JSON.parse(text).map((suggestion) => suggestion.phrase);
   }
 }
 
-class Webster extends BaseEngine {
+export class Webster extends BaseEngine {
   constructor() {
     super({
       engineUrl: "https://www.merriam-webster.com/lapi/v1/mwol-search/autocomplete?search=%s",
@@ -186,61 +182,73 @@ class Webster extends BaseEngine {
       example: {
         searchUrl: "https://www.merriam-webster.com/dictionary/%s",
         keyword: "dw",
-        description: "Dictionary"
-      }
+        description: "Dictionary",
+      },
     });
   }
 
-  parse(xhr) {
-    return Array.from(JSON.parse(xhr.responseText).docs).map((suggestion) => suggestion.word);
+  parse(text) {
+    return JSON.parse(text).docs.map((suggestion) => suggestion.word);
   }
 }
 
-class Qwant extends BaseEngine {
+// Qwant is a privacy-friendly search engine.
+export class Qwant extends BaseEngine {
   constructor() {
     super({
       engineUrl: "https://api.qwant.com/api/suggest?q=%s",
       regexps: ["^https?://www\\.qwant\\.com/"],
       example: {
         searchUrl: "https://www.qwant.com/?q=%s",
-        keyword: "qw"
-      }
+        keyword: "qw",
+      },
     });
   }
 
-  parse(xhr) {
-    return Array.from(JSON.parse(xhr.responseText).data.items).map((suggestion) => suggestion.value);
+  parse(text) {
+    return JSON.parse(text).data.items.map((suggestion) => suggestion.value);
   }
 }
 
-class UpToDate extends BaseEngine {
+// Brave is a privacy-friendly search engine.
+export class Brave extends BaseEngine {
   constructor() {
     super({
-      engineUrl: "https://www.uptodate.com/services/app/contents/search/autocomplete/json?term=%s&limit=10",
-      regexps: ["^https?://www\\.uptodate\\.com/"],
+      engineUrl: "https://search.brave.com/api/suggest?rich=false&q=%s",
+      regexps: ["^https?://search\\.brave\\.com/"],
       example: {
-        searchUrl: "https://www.uptodate.com/contents/search?search=%s&searchType=PLAIN_TEXT&source=USER_INPUT&searchControl=TOP_PULLDOWN&autoComplete=false",
-        keyword: "upto"
-      }
+        searchUrl: "https://search.brave.com/search?q=%s",
+        keyword: "br",
+      },
     });
   }
 
-  parse(xhr) { return JSON.parse(xhr.responseText).data.searchTerms; }
+  parse(text) {
+    return JSON.parse(text)[1];
+  }
 }
 
-// A dummy search engine which is guaranteed to match any search URL, but never produces completions.  This
-// allows the rest of the logic to be written knowing that there will always be a completion engine match.
-class DummyCompletionEngine extends BaseEngine {
+// Kagi is a paid ad-free search engine
+export class Kagi extends BaseEngine {
   constructor() {
     super({
-      regexps: ["."],
-      dummy: true
+      engineUrl: "https://kagi.com/autosuggest?q=%s",
+      regexps: ["^https?://www\\.kagi\\.com/"],
+      example: {
+        searchUrl: "https://www.kagi.com/search?q=%s",
+        keyword: "k",
+      },
     });
+  }
+
+  parse(text) {
+    return JSON.parse(text).map((suggestion) => suggestion.t);
   }
 }
 
-// Note: Order matters here.
-const CompletionEngines = [
+// On the user-facing documentation page pages/completion_engines_page.html, the completion search
+// engines will be shown in this order.
+export const list = [
   Youtube,
   GoogleMaps,
   Google,
@@ -248,11 +256,8 @@ const CompletionEngines = [
   Wikipedia,
   Bing,
   Amazon,
-  AmazonJapan,
   Webster,
+  Brave,
   Qwant,
-  UpToDate,
-  DummyCompletionEngine
+  Kagi,
 ];
-
-global.CompletionEngines = CompletionEngines;

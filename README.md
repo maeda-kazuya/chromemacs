@@ -2,9 +2,9 @@ Chromemacs - Chrome navigation by Emacs keybind
 =============================
 
 [Chromemacs](https://chrome.google.com/webstore/detail/chromemacs/kfdibhbheajeacnkkakomaliggbgndcf) is a browser extension that provides keyboard-based navigation and control of the web in the spirit of
-the Vim editor.
+the Emacs editor.
 
-__Installation instructions:__
+**Installation instructions:**
 
 Clone this repository and load unpacked via chrome://extensions
 
@@ -13,12 +13,11 @@ To install from source, see [here](CONTRIBUTING.md#installing-from-source).
 Chromemacs's Options page can be reached via a link on the help dialog (type `<c-h>`) or via the button next to Chromemacs
 on the extension pages of Chrome (`chrome://extensions`) or Firefox (`about:addons`).
 
-Keyboard Bindings
------------------
+## Keyboard Bindings
 
 Modifier keys are specified as `<c-x>`, `<m-x>`, and `<a-x>` for ctrl+x, meta+x, and alt+x
-respectively. For shift+x and ctrl-shift-x, just type `X` and `<c-X>`. See the next section for how to
-customize these bindings.
+respectively. For shift+x and ctrl-shift-x, just type `X` and `<c-X>`. See the next section for how
+to customize these bindings.
 
 Once you have Chromemacs installed, you can see this list of key bindings at any time by typing `?`.
 
@@ -55,7 +54,8 @@ Using find:
     n       cycle forward to the next find match
     N       cycle backward to the previous find match
 
-For advanced usage, see [regular expressions](https://github.com/philc/vimium/wiki/Find-Mode) on the wiki.
+For advanced usage, see [regular expressions](https://github.com/philc/vimium/wiki/Find-Mode) on the
+wiki.
 
 Navigating your history:
 
@@ -98,15 +98,15 @@ Additional advanced browsing commands:
 Chromemacs supports command repetition so, for example, hitting `5t` will open 5 tabs in rapid succession. `<Esc>` (or
 `<c-[>`) will clear any partial commands in the queue and will also exit insert and find modes.
 
-There are some advanced commands which aren't documented here; refer to the help dialog (type `?`) for a full
-list.
+There are additional commands which aren't included in this README; refer to the help dialog (type `?`) for a
+full list.
 
-Custom Key Mappings
--------------------
+## Custom Key Mappings
 
-You may remap or unmap any of the default key bindings in the "Custom key mappings" on the options page.
+You may remap or unmap any of the default key bindings in the "Custom key mappings" on the options
+page.
 
-Enter one of the following key mapping commands per line:
+Enter one of the following key mapping statements per line:
 
 - `map key command`: Maps a key to a Chromemacs command. Overrides Chrome's default behavior (if any).
 - `unmap key`: Unmaps a key and restores Chrome's default behavior (if any).
@@ -115,9 +115,10 @@ Enter one of the following key mapping commands per line:
 
 Examples:
 
-- `map <c-d> scrollPageDown` maps ctrl+d to scrolling the page down. Chrome's default behavior of bringing up
-  a bookmark dialog is suppressed.
-- `map r reload` maps the r key to reloading the page.
+- `map <c-d> scrollPageDown` maps ctrl+d to scrolling the page down. Chrome's default behavior of
+  showing a bookmark dialog is suppressed.
+- `map r reload hard` maps the r key to reloading the page, and also includes the "hard"
+  option to hard-reload the page.
 - `unmap <c-d>` removes any mapping for ctrl+d and restores Chrome's default behavior.
 - `unmap r` removes any mapping for the r key.
 
@@ -129,30 +130,32 @@ You can add comments to key mappings by starting a line with `"` or `#`.
 
 The following special keys are available for mapping:
 
-- `<c-*>`, `<a-*>`, `<m-*>` for ctrl, alt, and meta (command on Mac) respectively with any key. Replace `*`
-  with the key of choice.
+- `<c-*>`, `<a-*>`, `<s-*>`, `<m-*>` for ctrl, alt, shift, and meta (command on Mac) respectively
+  with any key. Replace `*` with the key of choice.
 - `<left>`, `<right>`, `<up>`, `<down>` for the arrow keys.
 - `<f1>` through `<f12>` for the function keys.
 - `<space>` for the space key.
-- `<tab>`, `<enter>`, `<delete>`, `<backspace>`, `<insert>`, `<home>` and `<end>` for the corresponding non-printable keys (version 1.62 onwards).
+- `<tab>`, `<enter>`, `<delete>`, `<backspace>`, `<insert>`, `<home>` and `<end>` for the
+  corresponding non-printable keys.
 
-Shifts are automatically detected so, for example, `<c-&>` corresponds to ctrl+shift+7 on an English keyboard.
+Shifts are automatically detected so, for example, `<c-&>` corresponds to ctrl+shift+7 on an English
+keyboard.
 
-More documentation
-------------------
-Many of the more advanced or involved features are documented on
-[Vimium's GitHub wiki](https://github.com/philc/vimium/wiki). Also
-see the [FAQ](https://github.com/philc/vimium/wiki/FAQ).
+## More documentation
 
-Contributing
-------------
+* [FAQ](https://github.com/philc/vimium/wiki/FAQ)
+* [Command listing](https://vimium.github.io/commands/)
+* [Vimium's GitHub wiki](https://github.com/philc/vimium/wiki): documentation the more advanced
+  features.
+
+## Contributing
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
-Release Notes
--------------
+## Release Notes
 
 See [CHANGELOG](CHANGELOG.md) for the major changes in each release.
 
-License
--------
+## License
+
 Copyright (c) Phil Crosby, Ilya Sukhar. See [MIT-LICENSE.txt](MIT-LICENSE.txt) for details.

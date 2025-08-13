@@ -1,47 +1,52 @@
+import "../lib/utils.js";
+import "../lib/settings.js";
+import "../lib/url_utils.js";
+import "../background_scripts/tab_recency.js";
+import * as bgUtils from "../background_scripts/bg_utils.js";
+import "../background_scripts/all_commands.js";
+import { Commands } from "../background_scripts/commands.js";
+import * as exclusions from "../background_scripts/exclusions.js";
+import "../background_scripts/completion_engines.js";
+import "../background_scripts/completion_search.js";
+import "../background_scripts/completion.js";
+import "../background_scripts/tab_operations.js";
+import * as marks from "../background_scripts/marks.js";
+
+import {
+  BookmarkCompleter,
+  DomainCompleter,
+  HistoryCompleter,
+  MultiCompleter,
+  SearchEngineCompleter,
+  TabCompleter,
+} from "./completion.js";
+
 // NOTE(philc): This file has many superfluous return statements in its functions, as a result of
-// converting from coffeescript to es6. Many can be removed, but I didn't take the time to diligently
-// track down precisely which return statements could be removed when I was doing the conversion.
+// converting from coffeescript to es6. Many can be removed, but I didn't take the time to
+// diligently track down precisely which return statements could be removed when I was doing the
+// conversion.
 
-let showUpgradeMessage;
+import * as TabOperations from "./tab_operations.js";
 
-// The browser may have tabs already open. We inject the content scripts immediately so that they work straight
-// away.
-chrome.runtime.onInstalled.addListener(function({ reason }) {
-  // See https://developer.chrome.com/extensions/runtime#event-onInstalled
-  if ([ "chrome_update", "shared_module_update" ].includes(reason)) { return; }
-  if (Utils.isFirefox()) { return; }
-  const manifest = chrome.runtime.getManifest();
-  // Content scripts loaded on every page should be in the same group. We assume it is the first.
-  const contentScripts = manifest.content_scripts[0];
-  const jobs = [ [ chrome.tabs.executeScript, contentScripts.js ], [ chrome.tabs.insertCSS, contentScripts.css ] ];
-  // Chrome complains if we don't evaluate chrome.runtime.lastError on errors (and we get errors for tabs on
-  // which Vimium cannot run).
-  const checkLastRuntimeError = () => chrome.runtime.lastError;
-  return chrome.tabs.query({ status: "complete" }, function(tabs) {
-    for (let tab of tabs)
-      for (let [ func, files ] of jobs)
-        for (let file of files)
-          func(tab.id, { file, allFrames: contentScripts.all_frames }, checkLastRuntimeError);
-  });
-});
-
-const frameIdsForTab = {};
-global.portsForTab = {};
-global.urlForTab = {};
+// Allow Vimium's content scripts to access chrome.storage.session. Otherwise,
+// chrome.storage.session will be null in content scripts.
+chrome.storage.session.setAccessLevel({ accessLevel: "TRUSTED_AND_UNTRUSTED_CONTEXTS" });
 
 // This is exported for use by "marks.js".
-global.tabLoadedHandlers = {}; // tabId -> function()
+globalThis.tabLoadedHandlers = {}; // tabId -> function()
 
-// A secret, available only within the current instantiation of Vimium. The secret is big, likely unguessable
-// in practice, but less than 2^31.
-chrome.storage.local.set({vimiumSecret: Math.floor(Math.random() * 2000000000)});
+// A Vimium secret, available only within the current browser session. The secret is a generated
+// strong random string.
+const randomArray = globalThis.crypto.getRandomValues(new Uint8Array(32)); // 32-byte random token.
+const secretToken = randomArray.reduce((a, b) => a.toString(16) + b.toString(16));
+chrome.storage.session.set({ vimiumSecret: secretToken });
 
 const completionSources = {
-  bookmarks: new BookmarkCompleter,
-  history: new HistoryCompleter,
-  domains: new DomainCompleter,
-  tabs: new TabCompleter,
-  searchEngines: new SearchEngineCompleter
+  bookmarks: new BookmarkCompleter(),
+  history: new HistoryCompleter(),
+  domains: new DomainCompleter(),
+  tabs: new TabCompleter(),
+  searchEngines: new SearchEngineCompleter(),
 };
 
 const completers = {
@@ -50,668 +55,877 @@ const completers = {
     completionSources.history,
     completionSources.domains,
     completionSources.tabs,
-    completionSources.searchEngines
-    ]),
+    completionSources.searchEngines,
+  ]),
   bookmarks: new MultiCompleter([completionSources.bookmarks]),
-  tabs: new MultiCompleter([completionSources.tabs])
+  tabs: new MultiCompleter([completionSources.tabs]),
 };
 
-const completionHandlers = {
-  filter(completer, request, port) {
-    // TODO(philc): Do we need any of these return statements?
-    return completer.filter(request, function(response) {
-      // NOTE(smblott): response contains `relevancyFunction` (function) properties which cause postMessage,
-      // below, to fail in Firefox. See #2576.  We cannot simply delete these methods, as they're needed
-      // elsewhere.  Converting the response to JSON and back is a quick and easy way to sanitize the object.
-      response = JSON.parse(JSON.stringify(response));
-      // We use try here because this may fail if the sender has already navigated away from the original page.
-      // This can happen, for example, when posting completion suggestions from the SearchEngineCompleter
-      // (which is done asynchronously).
-      try {
-        return port.postMessage(Object.assign(request, response, {handler: "completions"}));
-      } catch (error) {}
-    });
-  },
+// A query dictionary for `chrome.tabs.query` that will return only the visible tabs.
+const visibleTabsQueryArgs = { currentWindow: true };
+if (bgUtils.isFirefox()) {
+  // Only Firefox supports hidden tabs.
+  visibleTabsQueryArgs.hidden = false;
+}
 
-  refresh(completer, _, port) { completer.refresh(port); },
-  cancel(completer, _, port) { completer.cancel(port); }
-};
+function onURLChange(details) {
+  // sendMessage will throw "Error: Could not establish connection. Receiving end does not exist."
+  // if there is no Vimium content script loaded in the given tab. This can occur if the user
+  // navigated to a page where Vimium doesn't have permissions, like chrome:// URLs. This error is
+  // noisy and mysterious (it usually doesn't have a valid line number), so we silence it.
+  const message = {
+    handler: "checkEnabledAfterURLChange",
+    silenceLogging: true,
+  };
+  chrome.tabs.sendMessage(details.tabId, message, { frameId: details.frameId })
+    .catch(() => {});
+}
 
-const handleCompletions = sender => (request, port) =>
-      completionHandlers[request.handler](completers[request.name], request, port);
-
-chrome.runtime.onConnect.addListener(function(port) {
-  if (portHandlers[port.name])
-    return port.onMessage.addListener(portHandlers[port.name](port.sender, port));
-});
-
-chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-  request = Object.assign({count: 1, frameId: sender.frameId},
-                          request,
-                          {tab: sender.tab, tabId: sender.tab.id});
-  if (sendRequestHandlers[request.handler]) {
-    sendResponse(sendRequestHandlers[request.handler](request, sender));
-  }
-  // Ensure that the sendResponse callback is freed.
-  return false;
-});
-
-const onURLChange = details => chrome.tabs.sendMessage(details.tabId, {name: "checkEnabledAfterURLChange"});
-
-// Re-check whether Vimium is enabled for a frame when the url changes without a reload.
+// Re-check whether Vimium is enabled for a frame when the URL changes without a reload.
+// There's no reliable way to detect when the URL has changed in the content script, so we
+// have to use the webNavigation API in our background script.
 chrome.webNavigation.onHistoryStateUpdated.addListener(onURLChange); // history.pushState.
 chrome.webNavigation.onReferenceFragmentUpdated.addListener(onURLChange); // Hash changed.
 
-// Cache "content_scripts/vimium.css" in chrome.storage.local for UI components.
-(function() {
-  const req = new XMLHttpRequest();
-  req.open("GET", chrome.runtime.getURL("content_scripts/vimium.css"), true); // true -> asynchronous.
-  req.onload = function() {
-    const {status, responseText} = req;
-    if (status === 200)
-      return chrome.storage.local.set({vimiumCSSInChromeStorage: responseText});
-  };
-  return req.send();
-})();
+if (!globalThis.isUnitTests) {
+  // Cache "content_scripts/vimium.css" in chrome.storage.session for UI components.
+  (function () {
+    const url = chrome.runtime.getURL("content_scripts/vimium.css");
+    fetch(url).then(async (response) => {
+      if (response.ok) {
+        chrome.storage.session.set({ vimiumCSSInChromeStorage: await response.text() });
+      }
+    });
+  })();
+}
 
-const TabOperations = {
-  // Opens the url in the current tab.
-  openUrlInCurrentTab(request) {
-    if (Utils.hasJavascriptPrefix(request.url)) {
-      const tabId = request.tabId;
-      const frameId = request.frameId;
-      chrome.tabs.sendMessage(tabId, {frameId, name: "executeScript", script: request.url});
-    } else {
-      chrome.tabs.update(request.tabId, {url: Utils.convertToUrl(request.url)});
-    }
-  },
+function muteTab(tab) {
+  chrome.tabs.update(tab.id, { muted: !tab.mutedInfo.muted });
+}
 
-  // Opens request.url in new tab and switches to it.
-  openUrlInNewTab(request, callback) {
-    if (callback == null)
-      callback = function() {};
-    const tabConfig = {
-      url: Utils.convertToUrl(request.url),
-      active: true,
-      windowId: request.tab.windowId
-    };
+function toggleMuteTab(request, sender) {
+  const currentTab = request.tab;
+  const tabId = request.tabId;
+  const registryEntry = request.registryEntry;
 
-    const position = request.position;
-
-    let tabIndex = null;
-
-    // TODO(philc): Convert to a switch statement ES6.
-    switch (position) {
-      case "start": tabIndex = 0; break;
-      case "before": tabIndex = request.tab.index; break;
-      // if on Chrome or on Firefox but without openerTabId, `tabs.create` opens a tab at the end.
-      // but on Firefox and with openerTabId, it opens a new tab next to the opener tab
-      case "end": tabIndex = (Utils.isFirefox() ? 9999 : null); break;
-      // "after" is the default case when there are no options.
-      default: tabIndex = request.tab.index + 1;
-    }
-    tabConfig.index = tabIndex;
-
-    if (request.active != null)
-      tabConfig.active = request.active;
-    // Firefox does not support "about:newtab" in chrome.tabs.create.
-    if (tabConfig["url"] === Settings.defaults.newTabUrl)
-      delete tabConfig["url"];
-
-    // Firefox <57 throws an error when openerTabId is used (issue 1238314).
-    const canUseOpenerTabId = !(Utils.isFirefox() && (Utils.compareVersions(Utils.firefoxVersion(), "57") < 0));
-    if (canUseOpenerTabId)
-      tabConfig.openerTabId = request.tab.id;
-
-    // clean position and active, so following `openUrlInNewTab(request)` will create a tab just next to this new tab
-    return chrome.tabs.create(tabConfig, tab =>
-      callback(Object.assign(request, {tab, tabId: tab.id, position: "", active: false})));
-  },
-
-  // Opens request.url in new window and switches to it.
-  openUrlInNewWindow(request, callback) {
-    if (callback == null)
-      callback = function() {};
-    const winConfig = {
-      url: Utils.convertToUrl(request.url),
-      active: true
-    };
-    if (request.active != null)
-      winConfig.active = request.active;
-    // Firefox does not support "about:newtab" in chrome.tabs.create.
-    if (winConfig["url"] === Settings.defaults.newTabUrl)
-      delete winConfig["url"];
-    return chrome.windows.create(winConfig, callback);
-  }
-};
-
-const muteTab = tab => chrome.tabs.update(tab.id, {muted: !tab.mutedInfo.muted});
-const toggleMuteTab = function({tab: currentTab, registryEntry, tabId, frameId}) {
   if ((registryEntry.options.all != null) || (registryEntry.options.other != null)) {
     // If there are any audible, unmuted tabs, then we mute them; otherwise we unmute any muted tabs.
-    chrome.tabs.query({audible: true}, function(tabs) {
+    chrome.tabs.query({ audible: true }, function (tabs) {
       let tab;
-      if (registryEntry.options.other != null)
-        tabs = tabs.filter(t => t.id !== currentTab.id);
-      const audibleUnmutedTabs = tabs.filter(t => t.audible && !t.mutedInfo.muted);
+      if (registryEntry.options.other != null) {
+        tabs = tabs.filter((t) => t.id !== currentTab.id);
+      }
+      const audibleUnmutedTabs = tabs.filter((t) => t.audible && !t.mutedInfo.muted);
       if (audibleUnmutedTabs.length >= 0) {
-        chrome.tabs.sendMessage(tabId, {frameId, name: "showMessage", message: `Muting ${audibleUnmutedTabs.length} tab(s).`});
-        for (tab of audibleUnmutedTabs)
+        chrome.tabs.sendMessage(tabId, {
+          frameId: sender.frameId,
+          handler: "showMessage",
+          message: `Muting ${audibleUnmutedTabs.length} tab(s).`,
+        });
+        for (tab of audibleUnmutedTabs) {
           muteTab(tab);
+        }
       } else {
-        chrome.tabs.sendMessage(tabId, {frameId, name: "showMessage", message: "Unmuting all muted tabs."});
-        for (tab of tabs)
-          if (tab.mutedInfo.muted)
+        chrome.tabs.sendMessage(tabId, {
+          frameId: sender.frameId,
+          handler: "showMessage",
+          message: "Unmuting all muted tabs.",
+        });
+        for (tab of tabs) {
+          if (tab.mutedInfo.muted) {
             muteTab(tab);
+          }
+        }
       }
     });
   } else {
-    if (currentTab.mutedInfo.muted)
-      chrome.tabs.sendMessage(tabId, {frameId, name: "showMessage", message: "Unmuted tab."});
-    else
-      chrome.tabs.sendMessage(tabId, {frameId, name: "showMessage", message: "Muted tab."});
+    if (currentTab.mutedInfo.muted) {
+      chrome.tabs.sendMessage(tabId, {
+        frameId: sender.frameId,
+        handler: "showMessage",
+        message: "Unmuted tab.",
+      });
+    } else {
+      chrome.tabs.sendMessage(tabId, {
+        frameId: sender.frameId,
+        handler: "showMessage",
+        message: "Muted tab.",
+      });
+    }
     muteTab(currentTab);
   }
-};
+}
+
+// Find a tab's actual index in a given tab array returned by chrome.tabs.query. In Firefox, there
+// may be hidden tabs, so tab.tabIndex may not be the actual index into the array of visible tabs.
+function getTabIndex(tab, tabs) {
+  // First check if the tab is where we expect it, to avoid searching the array.
+  if (tabs.length > tab.index && tabs[tab.index].index === tab.index) {
+    return tab.index;
+  } else {
+    return tabs.findIndex((t) => t.index === tab.index);
+  }
+}
 
 //
 // Selects the tab with the ID specified in request.id
 //
-const selectSpecificTab = request => chrome.tabs.get(request.id, function(tab) {
-  if (chrome.windows != null)
-    chrome.windows.update(tab.windowId, { focused: true });
-  return chrome.tabs.update(request.id, { active: true });
-});
+async function selectSpecificTab(request) {
+  const tab = await chrome.tabs.get(request.id);
+  // Focus the tab's window. TODO(philc): Why are we null-checking chrome.windows here?
+  if (chrome.windows != null) {
+    await chrome.windows.update(tab.windowId, { focused: true });
+  }
+  await chrome.tabs.update(request.id, { active: true });
+}
 
-const moveTab = function({count, tab, registryEntry}) {
-  if (registryEntry.command === "moveTabLeft")
+function moveTab({ count, tab, registryEntry }) {
+  if (registryEntry.command === "moveTabLeft") {
     count = -count;
-  return chrome.tabs.query({ currentWindow: true }, function(tabs) {
-    const pinnedCount = (tabs.filter(tab => tab.pinned)).length;
+  }
+  return chrome.tabs.query(visibleTabsQueryArgs, function (tabs) {
+    const pinnedCount = (tabs.filter((tab) => tab.pinned)).length;
     const minIndex = tab.pinned ? 0 : pinnedCount;
     const maxIndex = (tab.pinned ? pinnedCount : tabs.length) - 1;
-    return chrome.tabs.move(tab.id,
-      {index: Math.max(minIndex, Math.min(maxIndex, tab.index + count))});
+    // The tabs array index of the new position.
+    const moveIndex = Math.max(minIndex, Math.min(maxIndex, getTabIndex(tab, tabs) + count));
+    return chrome.tabs.move(tab.id, {
+      index: tabs[moveIndex].index,
+    });
   });
-};
+}
 
-var mkRepeatCommand = command => (function(request) {
-  request.count--;
-  if (request.count >= 0)
-    return command(request, request => (mkRepeatCommand(command))(request));
-});
+function createRepeatCommand(command) {
+  return async function (request) {
+    let i = request.count - 1;
+    const r = Object.assign({}, request);
+    delete r.count;
+    while (i >= 0) {
+      i--;
+      await command(r);
+    }
+  };
+}
 
-// These are commands which are bound to keystrokes which must be handled by the background page. They are
-// mapped in commands.coffee.
+function nextZoomLevel(currentZoom, steps) {
+  // Chrome's default zoom levels.
+  const chromeLevels = [0.25, 0.33, 0.5, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5];
+  // Firefox's default zoom levels.
+  const firefoxLevels = [0.3, 0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.2, 1.33, 1.5, 1.7, 2, 2.4, 3, 4, 5];
+
+  let zoomLevels = chromeLevels; // Chrome by default
+  if (bgUtils.isFirefox()) {
+    zoomLevels = firefoxLevels;
+  }
+
+  if (steps === 0) { // Nothing
+    return currentZoom;
+  } else if (steps > 0) { // In
+    // Chrome sometimes returns values with floating point errors.
+    // Example: Chrome gives 0.32999999999999996 instead of 0.33.
+    currentZoom += 0.0000001; // This is needed to solve floating point bugs in Chrome.
+    const nextIndex = zoomLevels.findIndex((level) => level > currentZoom);
+    const floorIndex = nextIndex == -1 ? zoomLevels.length : nextIndex - 1;
+    return zoomLevels[Math.min(zoomLevels.length - 1, floorIndex + steps)];
+  } else if (steps < 0) { // Out
+    currentZoom -= 0.0000001; // This is needed to solve floating point bugs in Chrome.
+    let ceilIndex = zoomLevels.findIndex((level) => level >= currentZoom);
+    ceilIndex = ceilIndex == -1 ? zoomLevels.length : ceilIndex;
+    return zoomLevels[Math.max(0, ceilIndex + steps)];
+  }
+}
+
+// These are commands which are bound to keystrokes which must be handled by the background page.
+// They are mapped in commands.js.
 const BackgroundCommands = {
-  // Create a new tab.  Also, with:
+  // Create a new tab. Also, with:
   //     map X createTab http://www.bbc.com/news
   // create a new tab with the given URL.
-  createTab: mkRepeatCommand(function(request, callback) {
+  createTab: createRepeatCommand(async function (request) {
     if (request.urls == null) {
       if (request.url) {
         // If the request contains a URL, then use it.
         request.urls = [request.url];
       } else {
         // Otherwise, if we have a registryEntry containing URLs, then use them.
-        const urlList = request.registryEntry.optionList.filter(opt => Utils.isUrl(opt));
+        const options = Object.keys(request.registryEntry.options);
+        const promises = options.map((opt) => UrlUtils.isUrl(opt));
+        const isUrl = await Promise.all(promises);
+        const urlList = options.filter((_, i) => isUrl[i]);
         if (urlList.length > 0) {
           request.urls = urlList;
         } else {
           // Otherwise, just create a new tab.
-          const newTabUrl = Settings.get("newTabUrl");
-          if (newTabUrl === "pages/blank.html") {
-            // "pages/blank.html" does not work in incognito mode, so fall back to "chrome://newtab" instead.
-            request.urls = [request.tab.incognito ? "chrome://newtab" : chrome.runtime.getURL(newTabUrl)];
-          } else {
-            request.urls = [newTabUrl];
+          let newTabUrl = Settings.get("newTabUrl");
+          if (newTabUrl == "pages/blank.html") {
+            // "pages/blank.html" does not work in incognito mode, so fall back to "chrome://newtab"
+            // instead.
+            newTabUrl = request.tab.incognito
+              ? Settings.defaultOptions.newTabUrl
+              : chrome.runtime.getURL(newTabUrl);
           }
+          request.urls = [newTabUrl];
         }
       }
     }
-
     if (request.registryEntry.options.incognito || request.registryEntry.options.window) {
+      // Firefox does not allow an incognito window to be created with the URL about:newtab. It
+      // throws this error: "Illegal URL: about:newtab".
+      const urls = request.urls.filter((u) => u != Settings.defaultOptions.newTabUrl);
       const windowConfig = {
-        url: request.urls,
-        incognito: request.registryEntry.options.incognito || false
+        url: urls,
+        incognito: request.registryEntry.options.incognito || false,
       };
-      return chrome.windows.create(windowConfig, () => callback(request));
+      await chrome.windows.create(windowConfig);
     } else {
-      let openNextUrl;
       const urls = request.urls.slice().reverse();
-      if (request.position == null)
+      if (request.position == null) {
         request.position = request.registryEntry.options.position;
-      return (openNextUrl = function(request) {
-        if (urls.length > 0)
-          return TabOperations.openUrlInNewTab((Object.assign(request, {url: urls.pop()})), openNextUrl);
-        else
-          return callback(request);
-      })(request);
+      }
+      while (urls.length > 0) {
+        const url = urls.pop();
+        const tab = await TabOperations.openUrlInNewTab(Object.assign(request, { url }));
+        // Ensure subsequent invocations of this command place the next tab directly after this one.
+        Object.assign(request, { tab, position: "after", active: false });
+      }
     }
   }),
 
-  duplicateTab: mkRepeatCommand((request, callback) => {
-    return chrome.tabs.duplicate(request.tabId,
-                                 tab => callback(Object.assign(request, {tab, tabId: tab.id})))
+  duplicateTab: createRepeatCommand(async (request) => {
+    const tab = await chrome.tabs.duplicate(request.tabId);
+    // Ensure subsequent invocations of this command place the next tab directly after this one.
+    request.tabId = tab.id;
   }),
 
-  moveTabToNewWindow({count, tab}) {
-    chrome.tabs.query({currentWindow: true}, function(tabs) {
-      const activeTabIndex = tab.index;
+  moveTabToNewWindow({ count, tab }) {
+    // TODO(philc): Switch to the promise API of chrome.tabs.query.
+    chrome.tabs.query(visibleTabsQueryArgs, function (tabs) {
+      const activeTabIndex = getTabIndex(tab, tabs);
       const startTabIndex = Math.max(0, Math.min(activeTabIndex, tabs.length - count));
-      [ tab, ...tabs ] = tabs.slice(startTabIndex, startTabIndex + count);
-      chrome.windows.create({tabId: tab.id, incognito: tab.incognito}, function(window) {
-        chrome.tabs.move(tabs.map(t => t.id), {windowId: window.id, index: -1});
+      [tab, ...tabs] = tabs.slice(startTabIndex, startTabIndex + count);
+      chrome.windows.create({ tabId: tab.id, incognito: tab.incognito }, function (window) {
+        chrome.tabs.move(tabs.map((t) => t.id), { windowId: window.id, index: -1 });
       });
     });
   },
 
-  nextTab(request) { return selectTab("next", request); },
-  previousTab(request) { return selectTab("previous", request); },
-  firstTab(request) { return selectTab("first", request); },
-  lastTab(request) { return selectTab("last", request); },
-  removeTab({count, tab}) { return forCountTabs(count, tab, tab => chrome.tabs.remove(tab.id)); },
-  restoreTab: mkRepeatCommand((request, callback) => chrome.sessions.restore(null, callback(request))),
-  togglePinTab({count, tab}) { return forCountTabs(count, tab, tab => chrome.tabs.update(tab.id, {pinned: !tab.pinned})); },
+  nextTab(request) {
+    return selectTab("next", request);
+  },
+  previousTab(request) {
+    return selectTab("previous", request);
+  },
+  firstTab(request) {
+    return selectTab("first", request);
+  },
+  lastTab(request) {
+    return selectTab("last", request);
+  },
+  async removeTab({ count, tab }) {
+    await forCountTabs(count, tab, (tab) => {
+      // In Firefox, Ctrl-W will not close a pinned tab, but on Chrome, it will. We try to be
+      // consistent with each browser's UX for pinned tabs.
+      if (tab.pinned && bgUtils.isFirefox()) return;
+      chrome.tabs.remove(tab.id);
+    });
+  },
+  restoreTab: createRepeatCommand(async (request) => {
+    await chrome.sessions.restore(null);
+  }),
+  async togglePinTab({ count, tab }) {
+    await forCountTabs(count, tab, (tab) => {
+      chrome.tabs.update(tab.id, { pinned: !tab.pinned });
+    });
+  },
   toggleMuteTab,
   moveTabLeft: moveTab,
   moveTabRight: moveTab,
 
-  nextFrame({count, frameId, tabId}) {
-    frameIdsForTab[tabId] = cycleToFrame(frameIdsForTab[tabId], frameId, count);
-    return chrome.tabs.sendMessage(tabId, {name: "focusFrame", frameId: frameIdsForTab[tabId][0], highlight: true});
+  async setZoom({ tabId, registryEntry }) {
+    const level = registryEntry.options?.["level"] ?? "1";
+    const newZoom = parseFloat(level);
+    if (!isNaN(newZoom)) {
+      chrome.tabs.setZoom(tabId, newZoom);
+    }
+  },
+  async zoomIn({ count, tabId }) {
+    const currentZoom = await chrome.tabs.getZoom(tabId);
+    const newZoom = nextZoomLevel(currentZoom, count);
+    chrome.tabs.setZoom(tabId, newZoom);
+  },
+  async zoomOut({ count, tabId }) {
+    const currentZoom = await chrome.tabs.getZoom(tabId);
+    const newZoom = nextZoomLevel(currentZoom, -count);
+    chrome.tabs.setZoom(tabId, newZoom);
+  },
+  async zoomReset({ tabId }) {
+    chrome.tabs.setZoom(tabId, 0); // setZoom of 0 sets to the tab default.
   },
 
-  closeTabsOnLeft(request) { return removeTabsRelative("before", request); },
-  closeTabsOnRight(request) { return removeTabsRelative("after", request); },
-  closeOtherTabs(request) { return removeTabsRelative("both", request); },
-
-  visitPreviousTab({count, tab}) {
-    const tabIds = BgUtils.tabRecency.getTabsByRecency().filter(tabId => tabId !== tab.id);
-    if (tabIds.length > 0)
-      return selectSpecificTab({id: tabIds[(count-1) % tabIds.length]});
-  },
-
-  reload({count, tabId, registryEntry, tab: {windowId}}){
-    const bypassCache = registryEntry.options.hard != null ? registryEntry.options.hard : false;
-    return chrome.tabs.query({windowId}, function(tabs) {
-      const position = (function() {
-        for (let index = 0; index < tabs.length; index++) {
-          const tab = tabs[index];
-          if (tab.id === tabId) { return index; }
-        }
-      })();
-      tabs = [...tabs.slice(position), ...tabs.slice(0, position)];
-      count = Math.min(count, tabs.length);
-      for (let tab of tabs.slice(0, count)) {
-        chrome.tabs.reload(tab.id, {bypassCache});
-      }
+  async nextFrame({ count, tabId }) {
+    // We're assuming that these frames are returned in the order that they appear on the page. This
+    // seems to be the case empirically. If it's ever needed, we could also sort by frameId.
+    let frameIds = await getFrameIdsForTab(tabId);
+    const promises = frameIds.map(async (frameId) => {
+      // It is possible that this sendMessage call fails, if a frame gets unloaded while the request
+      // is in flight.
+      let isError = false;
+      const status = await (chrome.tabs.sendMessage(tabId, { handler: "getFocusStatus" }, {
+        frameId: frameId,
+      }).catch((_) => {
+        isError = true;
+      }));
+      return { frameId, status, isError };
     });
-  }
+
+    const frameResponses = (await Promise.all(promises)).filter((r) => !r.isError);
+
+    const focusedFrameId = frameResponses.find(({ status }) => status.focused)?.frameId;
+    // It's theoretically possible that focusedFrameId is null if the user switched tabs or away
+    // from the browser while the request is in flight.
+    if (focusedFrameId == null) return;
+
+    // Prune any frames which gave an error response (i.e. they disappeared).
+    frameIds = frameResponses.filter((r) => r.status.focusable).map((r) => r.frameId);
+
+    const index = frameIds.indexOf(focusedFrameId);
+    count = count ?? 1;
+    const nextIndex = (index + count) % frameIds.length;
+    if (index == nextIndex) return;
+    await chrome.tabs.sendMessage(tabId, { handler: "focusFrame", highlight: true }, {
+      frameId: frameIds[nextIndex],
+    });
+  },
+
+  async closeTabsOnLeft(request) {
+    await removeTabsRelative("before", request);
+  },
+  async closeTabsOnRight(request) {
+    await removeTabsRelative("after", request);
+  },
+  async closeOtherTabs(request) {
+    await removeTabsRelative("both", request);
+  },
+
+  async visitPreviousTab({ count, tab }) {
+    await bgUtils.tabRecency.init();
+    let tabIds = bgUtils.tabRecency.getTabsByRecency();
+    tabIds = tabIds.filter((tabId) => tabId !== tab.id);
+    if (tabIds.length > 0) {
+      const id = tabIds[(count - 1) % tabIds.length];
+      selectSpecificTab({ id });
+    }
+  },
+
+  async reload({ count, tab, registryEntry }) {
+    const bypassCache = registryEntry.options.hard != null ? registryEntry.options.hard : false;
+    await forCountTabs(count, tab, (tab) => {
+      chrome.tabs.reload(tab.id, { bypassCache });
+    });
+  },
 };
 
-var forCountTabs = (count, currentTab, callback) => chrome.tabs.query({currentWindow: true}, function(tabs) {
-  const activeTabIndex = currentTab.index;
+async function forCountTabs(count, currentTab, callback) {
+  const tabs = await chrome.tabs.query(visibleTabsQueryArgs);
+  const activeTabIndex = getTabIndex(currentTab, tabs);
   const startTabIndex = Math.max(0, Math.min(activeTabIndex, tabs.length - count));
-  for (let tab of tabs.slice(startTabIndex, startTabIndex + count))
+  for (const tab of tabs.slice(startTabIndex, startTabIndex + count)) {
     callback(tab);
-});
-
-// Remove tabs before, after, or either side of the currently active tab
-var removeTabsRelative = (direction, {tab: activeTab}) => chrome.tabs.query({currentWindow: true}, function(tabs) {
-  const shouldDelete =
-    (() => { switch (direction) {
-      case "before":
-        return index => index < activeTab.index;
-      case "after":
-        return index => index > activeTab.index;
-      case "both":
-        return index => index !== activeTab.index;
-    } })();
-
-  chrome.tabs.remove(tabs.filter(t => !t.pinned && shouldDelete(t.index))
-                     .map((t) => t.id));
-});
-
-// Selects a tab before or after the currently selected tab.
-// - direction: "next", "previous", "first" or "last".
-var selectTab = (direction, {count, tab}) => chrome.tabs.query({ currentWindow: true }, function(tabs) {
-  if (tabs.length > 1) {
-    const toSelect =
-      (() => { switch (direction) {
-        case "next":
-          return (tab.index + count) % tabs.length;
-        case "previous":
-          return ((tab.index - count) + (count * tabs.length)) % tabs.length;
-        case "first":
-          return Math.min(tabs.length - 1, count - 1);
-        case "last":
-          return Math.max(0, tabs.length - count);
-      } })();
-    chrome.tabs.update(tabs[toSelect].id, {active: true});
-  }
-});
-
-chrome.webNavigation.onCommitted.addListener(function({tabId, frameId}) {
-  const cssConf = {
-    frameId,
-    code: Settings.get("userDefinedLinkHintCss"),
-    runAt: "document_start"
-  };
-  return chrome.tabs.insertCSS(tabId, cssConf, () => chrome.runtime.lastError);
-});
-
-// Symbolic names for the three browser-action icons.
-const ENABLED_ICON = "icons/browser_action_enabled.png";
-const DISABLED_ICON = "icons/browser_action_disabled.png";
-const PARTIAL_ICON = "icons/browser_action_partial.png";
-
-// Convert the three icon PNGs to image data.
-const iconImageData = {};
-for (let icon of [ENABLED_ICON, DISABLED_ICON, PARTIAL_ICON]) {
-  iconImageData[icon] = {};
-  for (let scale of [19, 38]) {
-    (function(icon, scale) {
-      const canvas = document.createElement("canvas");
-      canvas.width = (canvas.height = scale);
-      // We cannot do the rest of this in the tests.
-      if ((chrome.areRunningVimiumTests == null) || !chrome.areRunningVimiumTests) {
-        const context = canvas.getContext("2d");
-        const image = new Image;
-        image.src = icon;
-        image.onload = function() {
-          context.drawImage(image, 0, 0, scale, scale);
-          iconImageData[icon][scale] = context.getImageData(0, 0, scale, scale);
-          return document.body.removeChild(canvas);
-        };
-        return document.body.appendChild(canvas);
-      }
-    })(icon, scale);
   }
 }
 
-var Frames = {
-  onConnect(sender, port) {
-    const [tabId, frameId] = [sender.tab.id, sender.frameId];
-    port.onDisconnect.addListener(() => Frames.unregisterFrame({tabId, frameId, port}));
-    port.postMessage({handler: "registerFrameId", chromeFrameId: frameId});
-    (portsForTab[tabId] != null ? portsForTab[tabId] : (portsForTab[tabId] = {}))[frameId] = port;
+// Remove tabs before, after, or either side of the currently active tab
+async function removeTabsRelative(direction, { count, tab }) {
+  // count is null if the user didn't type a count prefix before issuing this command and didn't
+  // specify a count=n option in their keymapping settings. Interpret this as closing all tabs on
+  // either side.
+  if (count == null) count = 99999;
+  const activeTab = tab;
+  const tabs = await chrome.tabs.query(visibleTabsQueryArgs);
+  const activeIndex = getTabIndex(activeTab, tabs);
+  const toRemove = tabs.filter((tab, tabIndex) => {
+    if (tab.pinned || tab.id == activeTab.id) {
+      return false;
+    }
+    switch (direction) {
+      case "before":
+        return tabIndex < activeIndex &&
+          tabIndex >= activeIndex - count;
+      case "after":
+        return tabIndex > activeIndex &&
+          tabIndex <= activeIndex + count;
+      case "both":
+        return true;
+    }
+  });
 
-    // Return our onMessage handler for this port.
-    return (request, port) => {
-      return this[request.handler]({request, tabId, frameId, port, sender});
+  await chrome.tabs.remove(toRemove.map((t) => t.id));
+}
+
+// Selects a tab before or after the currently selected tab.
+// - direction: "next", "previous", "first" or "last".
+function selectTab(direction, { count, tab }) {
+  chrome.tabs.query(visibleTabsQueryArgs, function (tabs) {
+    if (tabs.length > 1) {
+      const toSelect = (() => {
+        switch (direction) {
+          case "next":
+            return (getTabIndex(tab, tabs) + count) % tabs.length;
+          case "previous":
+            return ((getTabIndex(tab, tabs) - count) + (count * tabs.length)) % tabs.length;
+          case "first":
+            return Math.min(tabs.length - 1, count - 1);
+          case "last":
+            return Math.max(0, tabs.length - count);
+        }
+      })();
+      chrome.tabs.update(tabs[toSelect].id, { active: true });
+    }
+  });
+}
+
+chrome.webNavigation.onCommitted.addListener(async ({ tabId, frameId }) => {
+  // Vimium can't run on all tabs (e.g. chrome:// URLs). insertCSS will throw an error on such tabs,
+  // which is expected, and noise. Swallow that error.
+  const swallowError = () => {};
+  await Settings.onLoaded();
+  await chrome.scripting.insertCSS({
+    css: Settings.get("userDefinedLinkHintCss"),
+    target: {
+      tabId: tabId,
+      frameIds: [frameId],
+    },
+  }).catch(swallowError);
+});
+
+// Returns all frame IDs for the given tab. Note that in Chrome, this will omit frame IDs for frames
+// or iFrames which contain chrome-extension:// URLs, even if those pages are listed in Vimium's
+// web_accessible_resources in manifest.json.
+async function getFrameIdsForTab(tabId) {
+  // getAllFrames unfortunately excludes frames and iframes from chrome-extension:// URLs.
+  // In Firefox, by contrast, pages with moz-extension:// URLs are included.
+  const frames = await chrome.webNavigation.getAllFrames({ tabId: tabId });
+  return frames.map((f) => f.frameId);
+}
+
+const HintCoordinator = {
+  // Forward the message in "request" to all frames the in sender's tab.
+  broadcastLinkHintsMessage(request, sender) {
+    chrome.tabs.sendMessage(
+      sender.tab.id,
+      Object.assign(request, { handler: "linkHintsMessage" }),
+    );
+  },
+
+  // This is sent by the content script once the user issues the link hints command.
+  async prepareToActivateLinkHintsMode(
+    tabId,
+    originatingFrameId,
+    { modeIndex, requestedByHelpDialog, isExtensionPage },
+  ) {
+    const frameIds = await getFrameIdsForTab(tabId);
+    // If link hints was triggered on a Vimium extension page (like the vimium help dialog or
+    // options page), we cannot directly retrieve the frameIds for those pages using the
+    // getFrameIdsForTab. However, as a workaround, if those pages were the pages activating hints,
+    // their frameId is equal to originatingFrameId.
+    if (isExtensionPage && !frameIds.includes(originatingFrameId)) {
+      frameIds.push(originatingFrameId);
+    }
+    const timeout = 3000;
+    let promises = frameIds.map(async (frameId) => {
+      let promise = chrome.tabs.sendMessage(
+        tabId,
+        {
+          handler: "linkHintsMessage",
+          messageType: "getHintDescriptors",
+          modeIndex,
+          requestedByHelpDialog,
+        },
+        { frameId },
+      );
+
+      promise = Utils.promiseWithTimeout(promise, timeout)
+        .catch((error) => Utils.debugLog("Swallowed getHintDescriptors error:", error));
+
+      const descriptors = await promise;
+
+      return {
+        frameId,
+        descriptors,
+      };
+    });
+
+    const responses = (await Promise.all(promises))
+      .filter((r) => r.descriptors != null);
+
+    const frameIdToDescriptors = {};
+    for (const { frameId, descriptors } of responses) {
+      frameIdToDescriptors[frameId] = descriptors;
+    }
+
+    promises = responses.map(({ frameId }) => {
+      // Don't send this frame's own link hints back to it -- they're already stored in that frame's
+      // content script. At the time that we wrote this, this resulted in a 150% speedup for link
+      // busy sites like Reddit.
+      const outgoingFrameIdToHintDescriptors = Object.assign({}, frameIdToDescriptors);
+      delete outgoingFrameIdToHintDescriptors[frameId];
+      return chrome.tabs.sendMessage(
+        tabId,
+        {
+          handler: "linkHintsMessage",
+          messageType: "activateMode",
+          frameId: frameId,
+          originatingFrameId: originatingFrameId,
+          frameIdToHintDescriptors: outgoingFrameIdToHintDescriptors,
+          modeIndex: modeIndex,
+        },
+        { frameId },
+      ).catch((error) => {
+        Utils.debugLog(
+          "Swallowed linkHints activateMode error:",
+          error,
+          "tabId",
+          tabId,
+          "frameId",
+          frameId,
+        );
+      });
+    });
+    await Promise.all(promises);
+  },
+};
+
+const sendRequestHandlers = {
+  runBackgroundCommand(request, sender) {
+    return BackgroundCommands[request.registryEntry.command](request, sender);
+  },
+  // getCurrentTabUrl is used by the content scripts to get their full URL, because window.location
+  // cannot help with Chrome-specific URLs like "view-source:http:..".
+  getCurrentTabUrl({ tab }) {
+    return tab.url;
+  },
+  openUrlInNewTab: createRepeatCommand(async (request, callback) => {
+    await TabOperations.openUrlInNewTab(request, callback);
+  }),
+  async openUrlInNewWindow(request) {
+    await TabOperations.openUrlInNewWindow(request);
+  },
+  async openUrlInIncognito(request) {
+    await chrome.windows.create({
+      incognito: true,
+      url: await UrlUtils.convertToUrl(request.url),
+    });
+  },
+  openUrlInCurrentTab: TabOperations.openUrlInCurrentTab,
+  openOptionsPageInNewTab(request) {
+    return chrome.tabs.create({
+      url: chrome.runtime.getURL("pages/options.html"),
+      index: request.tab.index + 1,
+    });
+  },
+
+  launchSearchQuery({ query, openInNewTab }) {
+    const disposition = openInNewTab ? "NEW_TAB" : "CURRENT_TAB";
+    chrome.search.query({ disposition, text: query });
+  },
+
+  domReady(_, sender) {
+    const isTopFrame = sender.frameId == 0;
+    if (!isTopFrame) return;
+    const tabId = sender.tab.id;
+    // The only feature that uses tabLoadedHandlers is marks.
+    if (tabLoadedHandlers[tabId]) tabLoadedHandlers[tabId]();
+    delete tabLoadedHandlers[tabId];
+  },
+
+  nextFrame: BackgroundCommands.nextFrame,
+  selectSpecificTab,
+  createMark: marks.create,
+  gotoMark: marks.goto,
+  // Send a message to all frames in the current tab. If request.frameId is provided, then send
+  // messages to only the frame with that ID.
+  sendMessageToFrames(request, sender) {
+    const newRequest = Object.assign({}, request.message);
+    const options = request.frameId != null ? { frameId: request.frameId } : {};
+    chrome.tabs.sendMessage(sender.tab.id, newRequest, options);
+  },
+  broadcastLinkHintsMessage(request, sender) {
+    HintCoordinator.broadcastLinkHintsMessage(request, sender);
+  },
+  prepareToActivateLinkHintsMode(request, sender) {
+    HintCoordinator.prepareToActivateLinkHintsMode(sender.tab.id, sender.frameId, request);
+  },
+
+  async initializeFrame(request, sender) {
+    // Check whether the extension is enabled for the top frame's URL, rather than the URL of the
+    // specific frame that sent this request.
+    const enabledState = exclusions.isEnabledForUrl(sender.tab.url);
+
+    const isTopFrame = sender.frameId == 0;
+    if (isTopFrame) {
+      let whichIcon;
+      if (!enabledState.isEnabledForUrl) {
+        whichIcon = "disabled";
+      } else if (enabledState.passKeys.length > 0) {
+        whichIcon = "partial";
+      } else {
+        whichIcon = "enabled";
+      }
+
+      let iconSet = {
+        "enabled": {
+          "16": "../icons/action_enabled_16.png",
+          "32": "../icons/action_enabled_32.png",
+        },
+        "partial": {
+          "16": "../icons/action_partial_16.png",
+          "32": "../icons/action_partial_32.png",
+        },
+        "disabled": {
+          "16": "../icons/action_disabled_16.png",
+          "32": "../icons/action_disabled_32.png",
+        },
+      };
+
+      if (bgUtils.isFirefox()) {
+        // Only Firefox supports SVG icons.
+        iconSet = {
+          "enabled": "../icons/action_enabled.svg",
+          "partial": "../icons/action_partial.svg",
+          "disabled": "../icons/action_disabled.svg",
+        };
+      }
+
+      chrome.action.setIcon({ path: iconSet[whichIcon], tabId: sender.tab.id });
+    }
+
+    const response = Object.assign({
+      isFirefox: bgUtils.isFirefox(),
+      firefoxVersion: await bgUtils.getFirefoxVersion(),
+      frameId: sender.frameId,
+    }, enabledState);
+
+    return response;
+  },
+
+  async getBrowserInfo() {
+    return {
+      isFirefox: bgUtils.isFirefox(),
+      firefoxVersion: await bgUtils.getFirefoxVersion(),
     };
   },
 
-  registerFrame({tabId, frameId, port}) {
-    frameIdsForTab[tabId] = frameIdsForTab[tabId] || [];
-    if (!frameIdsForTab[tabId].includes(frameId)) {
-      frameIdsForTab[tabId].push(frameId);
-    }
-    portsForTab[tabId] = portsForTab[tabId] || {};
-    return portsForTab[tabId][frameId] = port;
+  async filterCompletions(request) {
+    const completer = completers[request.completerName];
+    let response = await completer.filter(request);
+
+    // NOTE(smblott): response contains `relevancyFunction` (function) properties which cause
+    // postMessage, below, to fail in Firefox. See #2576. We cannot simply delete these methods,
+    // as they're needed elsewhere. Converting the response to JSON and back is a quick and easy
+    // way to sanitize the object.
+    response = JSON.parse(JSON.stringify(response));
+
+    return response;
   },
 
-  unregisterFrame({tabId, frameId, port}) {
-    // Check that the port trying to unregister the frame hasn't already been replaced by a new frame
-    // registering. See #2125.
-    const registeredPort = portsForTab[tabId] != null ? portsForTab[tabId][frameId] : undefined;
-    if ((registeredPort === port) || !registeredPort) {
-      if (tabId in frameIdsForTab)
-        frameIdsForTab[tabId] = frameIdsForTab[tabId].filter((fId) => fId !== frameId);
-      if (tabId in portsForTab)
-        delete portsForTab[tabId][frameId];
-    }
-    HintCoordinator.unregisterFrame(tabId, frameId);
+  refreshCompletions(request) {
+    const completer = completers[request.completerName];
+    completer.refresh();
   },
 
-  isEnabledForUrl({request, tabId, port}) {
-    if (request.frameIsFocused)
-      urlForTab[tabId] = request.url;
-    request.isFirefox = Utils.isFirefox(); // Update the value for Utils.isFirefox in the frontend.
-    const enabledState = Exclusions.isEnabledForUrl(request.url);
-
-    if (request.frameIsFocused) {
-      if (chrome.browserAction.setIcon) {
-        chrome.browserAction.setIcon({tabId, imageData: (function() {
-        const enabledStateIcon =
-          !enabledState.isEnabledForUrl ?
-            DISABLED_ICON
-          : enabledState.passKeys.length >= 0 ?
-            PARTIAL_ICON
-          :
-            ENABLED_ICON;
-        return iconImageData[enabledStateIcon];
-      })()});
-      }
-    }
-
-    return port.postMessage(Object.assign(request, enabledState));
+  cancelCompletions(request) {
+    const completer = completers[request.completerName];
+    completer.cancel();
   },
-
-  domReady({tabId, frameId}) {
-    if (frameId == 0) {
-      if (tabLoadedHandlers[tabId])
-        tabLoadedHandlers[tabId]();
-      delete tabLoadedHandlers[tabId];
-    }
-  },
-
-  linkHintsMessage({request, tabId, frameId}) {
-    HintCoordinator.onMessage(tabId, frameId, request);
-  },
-
-  // For debugging only. This allows content scripts to log messages to the extension's logging page.
-  log({frameId, sender, request: {message}}) {
-    BgUtils.log(`${frameId} ${message}`, sender);
-  }
 };
 
-const handleFrameFocused = function({tabId, frameId}) {
-  if (frameIdsForTab[tabId] == null)
-    frameIdsForTab[tabId] = [];
-  frameIdsForTab[tabId] = cycleToFrame(frameIdsForTab[tabId], frameId);
-  // Inform all frames that a frame has received the focus.
-  return chrome.tabs.sendMessage(tabId, {name: "frameFocused", focusFrameId: frameId});
-};
-
-// Rotate through frames to the frame count places after frameId.
-var cycleToFrame = function(frames, frameId, count) {
-  // We can't always track which frame chrome has focused, but here we learn that it's frameId; so add an
-  // additional offset such that we do indeed start from frameId.
-  if (count == null)
-    count = 0;
-  count = (count + Math.max(0, frames.indexOf(frameId))) % frames.length;
-  return [...frames.slice(count), ...frames.slice(0, count)];
-};
-
-var HintCoordinator = {
-  tabState: {},
-
-  onMessage(tabId, frameId, request) {
-    if (request.messageType in this) {
-      return this[request.messageType](tabId, frameId, request);
-    } else {
-      // If there's no handler here, then the message is forwarded to all frames in the sender's tab.
-      return this.sendMessage(request.messageType, tabId, request);
-    }
-  },
-
-  // Post a link-hints message to a particular frame's port. We catch errors in case the frame has gone away.
-  postMessage(tabId, frameId, messageType, port, request) {
-    if (request == null)
-      request = {};
-    try {
-      return port.postMessage(Object.assign(request, {handler: "linkHintsMessage", messageType}));
-    } catch (error) {
-      return this.unregisterFrame(tabId, frameId);
-    }
-  },
-
-  // Post a link-hints message to all participating frames.
-  sendMessage(messageType, tabId, request) {
-    if (request == null)
-      request = {};
-
-    for (let frameId of Object.keys(this.tabState[tabId].ports || {})) {
-      const port = this.tabState[tabId].ports[frameId];
-      this.postMessage(tabId, parseInt(frameId), messageType, port, request)
-    }
-  },
-
-  prepareToActivateMode(tabId, originatingFrameId, {modeIndex, isVimiumHelpDialog}) {
-    this.tabState[tabId] = {frameIds: frameIdsForTab[tabId].slice(), hintDescriptors: {}, originatingFrameId, modeIndex};
-    this.tabState[tabId].ports = {};
-    frameIdsForTab[tabId].map(frameId => {
-      return this.tabState[tabId].ports[frameId] = portsForTab[tabId][frameId];
+Utils.addChromeRuntimeOnMessageListener(
+  Object.keys(sendRequestHandlers),
+  async function (request, sender) {
+    Utils.debugLog(
+      "main.js: onMessage:%ourl:%otab:%oframe:%o",
+      request.handler,
+      sender.url.replace(/https?:\/\//, ""),
+      sender.tab?.id,
+      sender.frameId,
+      // request // Often useful for debugging.
+    );
+    // NOTE(philc): We expect all messages to come from a content script in a tab. I've observed in
+    // Firefox when the extension is first installed, domReady and initializeFrame messages come from
+    // content scripts in about:blank URLs, which have a null sender.tab. I don't know what this
+    // corresponds to. Since we expect a valid sender.tab, ignore those messages.
+    if (sender.tab == null) return;
+    await Settings.onLoaded();
+    request = Object.assign({ count: 1 }, request, {
+      tab: sender.tab,
+      tabId: sender.tab.id,
     });
-    this.sendMessage("getHintDescriptors", tabId, {modeIndex, isVimiumHelpDialog});
+    const handler = sendRequestHandlers[request.handler];
+    const result = handler ? await handler(request, sender) : null;
+    return result;
   },
+);
 
-  // Receive hint descriptors from all frames and activate link-hints mode when we have them all.
-  postHintDescriptors(tabId, frameId, {hintDescriptors}) {
-    if (!this.tabState[tabId].frameIds.includes(frameId)) {
-      return;
-    }
-    this.tabState[tabId].hintDescriptors[frameId] = hintDescriptors;
-    this.tabState[tabId].frameIds = this.tabState[tabId].frameIds.filter(fId => fId !== frameId);
-    if (this.tabState[tabId].frameIds.length === 0) {
-      for (frameId of Object.keys(this.tabState[tabId].ports || {})) {
-        const port = this.tabState[tabId].ports[frameId];
-        if (frameId in this.tabState[tabId].hintDescriptors) {
-          hintDescriptors = Object.assign({}, this.tabState[tabId].hintDescriptors);
-          // We do not send back the frame's own hint descriptors.  This is faster (approx. speedup 3/2) for
-          // link-busy sites like reddit.
-          delete hintDescriptors[frameId];
-          this.postMessage(tabId, parseInt(frameId), "activateMode", port, {
-            originatingFrameId: this.tabState[tabId].originatingFrameId,
-            hintDescriptors,
-            modeIndex: this.tabState[tabId].modeIndex
-          });
-        }
-      }
-    }
-  },
-
-  // If an unregistering frame is participating in link-hints mode, then we need to tidy up after it.
-  unregisterFrame(tabId, frameId) {
-    if (!this.tabState[tabId])
-      return;
-    if ((this.tabState[tabId].ports != null ? this.tabState[tabId].ports[frameId] : undefined) != null)
-      delete this.tabState[tabId].ports[frameId];
-    if ((this.tabState[tabId].frameIds != null) && this.tabState[tabId].frameIds.includes(frameId)) {
-      // We fake an empty "postHintDescriptors" because the frame has gone away.
-      return this.postHintDescriptors(tabId, frameId, {hintDescriptors: []});
-    }
+// Remove chrome.storage.local/findModeRawQueryListIncognito if there are no remaining
+// incognito-mode windows. Since the common case is that there are none to begin with, we first
+// check whether the key is set at all.
+chrome.tabs.onRemoved.addListener(function (tabId) {
+  if (tabLoadedHandlers[tabId]) {
+    delete tabLoadedHandlers[tabId];
   }
-};
-
-// Port handler mapping
-var portHandlers = {
-  completions: handleCompletions,
-  frames: Frames.onConnect.bind(Frames)
-};
-
-var sendRequestHandlers = {
-  runBackgroundCommand(request) { return BackgroundCommands[request.registryEntry.command](request); },
-  // getCurrentTabUrl is used by the content scripts to get their full URL, because window.location cannot help
-  // with Chrome-specific URLs like "view-source:http:..".
-  getCurrentTabUrl({tab}) { return tab.url; },
-  openUrlInNewTab: mkRepeatCommand((request, callback) => TabOperations.openUrlInNewTab(request, callback)),
-  openUrlInNewWindow(request) { return TabOperations.openUrlInNewWindow(request); },
-  openUrlInIncognito(request) { return chrome.windows.create({incognito: true, url: Utils.convertToUrl(request.url)}); },
-  openUrlInCurrentTab: TabOperations.openUrlInCurrentTab,
-  openOptionsPageInNewTab(request) {
-    return chrome.tabs.create({url: chrome.runtime.getURL("pages/options.html"), index: request.tab.index + 1});
-  },
-  frameFocused: handleFrameFocused,
-  nextFrame: BackgroundCommands.nextFrame,
-  selectSpecificTab,
-  createMark: Marks.create.bind(Marks),
-  gotoMark: Marks.goto.bind(Marks),
-  // Send a message to all frames in the current tab.
-  sendMessageToFrames(request, sender) { return chrome.tabs.sendMessage(sender.tab.id, request.message); }
-};
-
-// We always remove chrome.storage.local/findModeRawQueryListIncognito on startup.
-chrome.storage.local.remove("findModeRawQueryListIncognito");
-
-// Tidy up tab caches when tabs are removed.  Also remove chrome.storage.local/findModeRawQueryListIncognito if
-// there are no remaining incognito-mode windows.  Since the common case is that there are none to begin with,
-// we first check whether the key is set at all.
-chrome.tabs.onRemoved.addListener(function(tabId) {
-  for (let cache of [frameIdsForTab, urlForTab, portsForTab, HintCoordinator.tabState]) { delete cache[tabId]; }
-  return chrome.storage.local.get("findModeRawQueryListIncognito", function(items) {
+  chrome.storage.session.get("findModeRawQueryListIncognito", function (items) {
     if (items.findModeRawQueryListIncognito) {
-      return chrome.windows != null ? chrome.windows.getAll(null, function(windows) {
-        for (let window of windows) {
-          if (window.incognito)
-            return;
-        }
-        // There are no remaining incognito-mode tabs, and findModeRawQueryListIncognito is set.
-        return chrome.storage.local.remove("findModeRawQueryListIncognito");
-      }) : undefined;
+      return chrome.windows != null
+        ? chrome.windows.getAll(null, function (windows) {
+          for (const window of windows) {
+            if (window.incognito) return;
+          }
+          // There are no remaining incognito-mode tabs, and findModeRawQueryListIncognito is set.
+          return chrome.storage.session.remove("findModeRawQueryListIncognito");
+        })
+        : undefined;
     }
   });
 });
 
 // Convenience function for development use.
-window.runTests = () => open(chrome.runtime.getURL('tests/dom_tests/dom_tests.html'));
+globalThis.runTests = () => open(chrome.runtime.getURL("tests/dom_tests/dom_tests.html"));
 
 //
 // Begin initialization.
 //
 
-// Show notification on upgrade.
-(showUpgradeMessage = function() {
+// True if the major version of Vimium has changed.
+// - previousVersion: this will be null for new installs.
+function majorVersionHasIncreased(previousVersion) {
   const currentVersion = Utils.getCurrentVersion();
-  // Avoid showing the upgrade notification when previousVersion is undefined, which is the case for new
-  // installs.
-  if (!Settings.has("previousVersion"))
-    Settings.set("previousVersion", currentVersion);
-  const previousVersion = Settings.get("previousVersion");
-  if (Utils.compareVersions(currentVersion, previousVersion ) === 1) {
-    const currentVersionNumbers = currentVersion.split(".");
-    const previousVersionNumbers = previousVersion.split(".");
-    if (currentVersionNumbers.slice(0, 2).join(".") === previousVersionNumbers.slice(0, 2).join(".")) {
-      // We do not show an upgrade message for patch/silent releases.  Such releases have the same major and
-      // minor version numbers.  We do, however, update the recorded previous version.
-      Settings.set("previousVersion", currentVersion);
-    } else {
-      const notificationId = "VimiumUpgradeNotification";
-      const notification = {
-        type: "basic",
-        iconUrl: chrome.runtime.getURL("icons/vimium.png"),
-        title: "Vimium Upgrade",
-        message: `Vimium has been upgraded to version ${currentVersion}. Click here for more information.`,
-        isClickable: true
-      };
-      if (chrome.notifications && chrome.notifications.create) {
-        chrome.notifications.create(notificationId, notification, function() {
-          if (!chrome.runtime.lastError) {
-            Settings.set("previousVersion", currentVersion);
-            chrome.notifications.onClicked.addListener(function(id) {
-              if (id === notificationId) {
-                chrome.tabs.query({ active: true, currentWindow: true }, function(...args) {
-                  const [tab] = args[0];
-                  return TabOperations.openUrlInNewTab({tab, tabId: tab.id, url: "https://github.com/philc/vimium/blob/master/CHANGELOG.md"});
-                });
-              }
-            });
-          }
-        });
-      } else {
-        // We need to wait for the user to accept the "notifications" permission.
-        chrome.permissions.onAdded.addListener(showUpgradeMessage);
-      }
-    }
-  }
-})();
+  if (previousVersion == null) return false;
+  const currentMajorVersion = currentVersion.split(".").slice(0, 2).join(".");
+  const previousMajorVersion = previousVersion.split(".").slice(0, 2).join(".");
+  return Utils.compareVersions(currentMajorVersion, previousMajorVersion) == 1;
+}
 
-// The install date is shown on the logging page.
-chrome.runtime.onInstalled.addListener(function({reason}) {
-  if (!["chrome_update", "shared_module_update"].includes(reason))
-    chrome.storage.local.set({installDate: new Date().toString()});
+// Show notification on upgrade.
+async function showUpgradeMessageIfNecessary(onInstalledDetails) {
+  const currentVersion = Utils.getCurrentVersion();
+  // We do not show an upgrade message for patch/silent releases. Such releases have the same
+  // major and minor version numbers.
+  if (
+    !majorVersionHasIncreased(onInstalledDetails.previousVersion) ||
+    Settings.get("hideUpdateNotifications")
+  ) {
+    return;
+  }
+
+  // NOTE(philc): These notifications use the system notification UI. So, if you don't have
+  // notifications enabled from your browser (e.g. in Notification Settings in OSX), then
+  // chrome.notification.create will succeed, but you won't see it.
+  const notificationId = "VimiumUpgradeNotification";
+  await chrome.notifications.create(
+    notificationId,
+    {
+      type: "basic",
+      iconUrl: chrome.runtime.getURL("icons/icon128.png"),
+      title: "Vimium Upgrade",
+      message:
+        `Vimium has been upgraded to version ${currentVersion}. Click here for more information.`,
+      isClickable: true,
+    },
+  );
+  if (!chrome.runtime.lastError) {
+    chrome.notifications.onClicked.addListener(async function (id) {
+      if (id != notificationId) return;
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tab = tabs[0];
+      TabOperations.openUrlInNewTab({
+        tab,
+        tabId: tab.id,
+        url: "https://github.com/philc/vimium/blob/master/CHANGELOG.md",
+      });
+    });
+  }
+}
+
+async function injectContentScriptsAndCSSIntoExistingTabs() {
+  const manifest = chrome.runtime.getManifest();
+  const contentScriptConfig = manifest.content_scripts[0];
+  const contentScripts = contentScriptConfig.js;
+  const cssFiles = contentScriptConfig.css;
+
+  // The scripting.executeScript and scripting.insertCSS APIs can fail if we don't have permissions
+  // to run scripts in a given tab. Examples are: chrome:// URLs, file:// pages (if the user hasn't
+  // granted Vimium access to file URLs), and probably incognito tabs (unconfirmed). Calling these
+  // APIs on such tabs results in an error getting logged on the background page. To avoid this
+  // noise, we swallow the failures. We could instead try to determine if the tab is scriptable by
+  // checking its URL scheme before calling these APIs, but that approach has some nuance to it.
+  // This is simpler.
+  const swallowError = (_) => {};
+
+  const tabs = await chrome.tabs.query({ status: "complete" });
+  for (const tab of tabs) {
+    const target = { tabId: tab.id, allFrames: true };
+
+    // Inject all of our content javascripts.
+    chrome.scripting.executeScript({
+      files: contentScripts,
+      target: target,
+    }).catch(swallowError);
+
+    // Inject our extension's CSS.
+    chrome.scripting.insertCSS({
+      files: cssFiles,
+      target: target,
+    }).catch(swallowError);
+
+    // Inject the user's link hint CSS.
+    chrome.scripting.insertCSS({
+      css: Settings.get("userDefinedLinkHintCss"),
+      target: target,
+    }).catch(swallowError);
+  }
+}
+
+async function initializeExtension() {
+  await Settings.onLoaded();
+  await Commands.init();
+}
+
+// The browser may have tabs already open. We inject the content scripts and Vimium's CSS
+// immediately so that the extension is running on the pages immediately after install, rather than
+// having to reload those pages.
+chrome.runtime.onInstalled.addListener(async (details) => {
+  Utils.debugLog("chrome.runtime.onInstalled");
+
+  // NOTE(philc): In my testing, when the onInstalled event occurs, the onStartup event does not
+  // also occur, so we need to initialize Vimium here.
+  await initializeExtension();
+
+  const shouldInjectContentScripts =
+    // NOTE(philc): 2023-06-16: we do not install the content scripts in all tabs on Firefox.
+    // I believe this is because Firefox does this already. See https://stackoverflow.com/a/37132144
+    // for commentary.
+    !bgUtils.isFirefox() &&
+    (["chrome_update", "shared_module_update"].includes(details.reason));
+  if (shouldInjectContentScripts) injectContentScriptsAndCSSIntoExistingTabs();
+
+  await showUpgradeMessageIfNecessary(details);
 });
 
-Object.assign(global, {TabOperations, Frames});
+// Note that this event is not fired when an incognito profile is started.
+chrome.runtime.onStartup.addListener(async () => {
+  Utils.debugLog("chrome.runtime.onStartup");
+  await initializeExtension();
+});
+
+Object.assign(globalThis, {
+  TabOperations,
+  // Exported for tests:
+  HintCoordinator,
+  BackgroundCommands,
+  majorVersionHasIncreased,
+  nextZoomLevel,
+});
+
+// The chrome.runtime.onStartup and onInstalled events are not fired when disabling and then
+// re-enabling the extension in developer mode, so we also initialize the extension here.
+initializeExtension();
